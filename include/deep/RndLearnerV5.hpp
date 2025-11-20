@@ -907,7 +907,7 @@ namespace ufo
 
         boost::tribool checkQuery(int i, map<int, ExprVector> &annotations)
         {
-            return checkCHC2(*tr[i], annotations, true);
+            return checkCHC2(*qr[i], annotations, true);
         }
 
         bool checkAllCHCs(int i, Expr x)

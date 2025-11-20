@@ -1,0 +1,4 @@
+[submodule "tools/polar"]
+	path = tools/polar
+	url = https://github.com/malachitm/polar.git
+	branch = master

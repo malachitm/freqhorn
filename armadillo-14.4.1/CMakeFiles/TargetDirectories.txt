@@ -1,0 +1,16 @@
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/armadillo.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/test.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/edit_cache.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/rebuild_cache.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/list_install_components.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/install.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/install/local.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/CMakeFiles/install/strip.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/smoke_test.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/test.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/edit_cache.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/rebuild_cache.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/list_install_components.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/install.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/install/local.dir
+/home/mtm20cb/tools/freqhorn/armadillo-14.4.1/tests1/CMakeFiles/install/strip.dir

@@ -1,0 +1,685 @@
+tm20cb@device0220:~/tools/freqhorn/build$ make
+[ 25%] Building CXX object tools/bnd/CMakeFiles/expl.dir/BoundedExplorer.cpp.o
+In file included from /usr/include/boost/multiprecision/cpp_int.hpp:17,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:52,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:44,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/ZExprConverter.hpp:7,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/EZ3.hh:21,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/SMTUtils.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/AeValSolver.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/Horn.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/BndExpl.hpp:4,
+                 from /home/mtm20cb/tools/freqhorn/tools/bnd/BoundedExplorer.cpp:1:
+/usr/include/boost/multiprecision/detail/standalone_config.hpp:36:7: warning: #warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)" [-Wcpp]
+   36 |  #    warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)"
+      |       ^~~~~~~
+In file included from /usr/include/boost/math/cstdfloat/cstdfloat_types.hpp:17,
+                 from /usr/include/boost/cstdfloat.hpp:18,
+                 from /usr/include/boost/multiprecision/detail/float128_functions.hpp:15,
+                 from /usr/include/boost/multiprecision/detail/fpclassify.hpp:13,
+                 from /usr/include/boost/multiprecision/detail/default_ops.hpp:15,
+                 from /usr/include/boost/multiprecision/detail/generic_interconvert.hpp:12,
+                 from /usr/include/boost/multiprecision/number.hpp:12,
+                 from /usr/include/boost/multiprecision/cpp_int.hpp:19:
+/usr/include/boost/math/tools/config.hpp:23:6: warning: #warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)" [-Wcpp]
+   23 | #    warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)"
+      |      ^~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1210:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1210 |   struct DagVisit : public std::unary_function<Expr,Expr>
+      |                                 ^~~~~~~~~~~~~~
+In file included from /usr/include/c++/13/string:49,
+                 from /usr/include/c++/13/bits/locale_classes.h:40,
+                 from /usr/include/c++/13/bits/ios_base.h:41,
+                 from /usr/include/c++/13/ios:44,
+                 from /usr/include/c++/13/istream:40,
+                 from /usr/include/c++/13/fstream:40,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/Horn.hpp:4:
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1489:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1489 |       struct CIRCSIZE : public std::unary_function<Expr,VisitAction>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1525:46: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1525 |       struct TrivialSimplifier : public std::unary_function<Expr,Expr>
+      |                                              ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1643:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1643 |       struct GatherOps : public std::unary_function<Expr,Expr>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1701:41: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1701 |       struct NormalizeOps : public std::unary_function<Expr,Expr>
+      |                                         ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1845:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1845 |       struct NNF : public std::unary_function<Expr,VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2376:42: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2376 |       class IsHardIntConst : public std::unary_function<Expr,bool>
+      |                                          ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2385:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2385 |       class IsFApp : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2395:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2395 |       class IsConst : public std::unary_function<Expr,bool>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2407:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2407 |        class IsVar : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2416:36: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2416 |       class IsSelect : public std::unary_function<Expr,bool>
+      |                                    ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2424:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2424 |       class IsStore : public std::unary_function<Expr,bool>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2713:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2713 |     struct RAV: public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2724:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2724 |     struct RAVALL: public std::unary_function<Expr,VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2741:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2741 |     struct RAVALLM: public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2754:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2754 |     struct RAVALLMR: public std::unary_function<Expr,VisitAction>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2770:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2770 |     struct RAVSIMP: public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2790:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2790 |     struct FV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2818:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2818 |     struct RV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2835:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2835 |     struct RVSIMP : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2863:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2863 |     struct CV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2889:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2889 |     struct ContainsOp : public std::unary_function<Expr,VisitAction>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2906:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2906 |     struct HasUninterp : public std::unary_function<Expr,VisitAction>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2931:31: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2931 |     struct SIZE : public std::unary_function<Expr,VisitAction>
+      |                               ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2945:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2945 |     struct RW : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+In file included from /home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3204:
+/home/mtm20cb/tools/freqhorn/include/ufo/ExprBv.hh:181:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+  181 |       class IsVVar : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3381:17: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3381 |     public std::unary_function<expr::Expr, std::size_t>
+      |                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3394:17: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3394 |     public std::unary_function<expr::Expr, std::size_t>
+      |                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3428:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3428 |     struct ABSCST : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3530:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3530 |     struct SUBBND : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:49:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+   49 |   struct ast_ptr_hash : public std::unary_function<ast,std::size_t>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:58:41: warning: ‘template<class _Arg1, class _Arg2, class _Result> struct std::binary_function’ is deprecated [-Wdeprecated-declarations]
+   58 |   struct ast_ptr_equal_to : public std::binary_function<ast,ast,bool>
+      |                                         ^~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:131:12: note: declared here
+  131 |     struct binary_function
+      |            ^~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:376:30: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+  376 |   class ZModel : public std::unary_function<Expr,Expr>
+      |                              ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:1996:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1996 |   struct FindNonlin : public std::unary_function<Expr, VisitAction>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2636:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2636 |   struct RAVSUBEXPR: public std::unary_function<Expr,VisitAction>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2738:39: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2738 |   struct SelectReplacer : public std::unary_function<Expr, VisitAction>
+      |                                       ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2762:45: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2762 |   struct QuantifiedVarsFilter : public std::unary_function<Expr, VisitAction>
+      |                                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3810:40: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3810 |   struct TransitionMiner : public std::unary_function<Expr, VisitAction>
+      |                                        ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3857:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3857 |   struct CondRetriever : public std::unary_function<Expr, VisitAction>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3873:40: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3873 |   struct AccessRetriever : public std::unary_function<Expr, VisitAction>
+      |                                        ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3889:39: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3889 |   struct DeltaRetriever : public std::unary_function<Expr, VisitAction>
+      |                                       ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:4186:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 4186 |   struct QVMiner : public std::unary_function<Expr, VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+cc1plus: note: unrecognized command-line option ‘-Wno-inconsistent-missing-override’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-covered-switch-default’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-sometimes-uninitialized’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-redeclared-class-member’ may have been intended to silence earlier diagnostics
+[ 50%] Linking CXX executable expl
+[ 50%] Built target expl
+[ 75%] Building CXX object tools/deep/CMakeFiles/freqhorn.dir/DeepHorn.cpp.o
+In file included from /usr/include/boost/multiprecision/cpp_int.hpp:17,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:52,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:44,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/ZExprConverter.hpp:7,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/EZ3.hh:21,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/SMTUtils.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/ae/AeValSolver.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/Horn.hpp:5,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/RndLearner.hpp:4,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV2.hpp:4,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp:4,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:4,
+                 from /home/mtm20cb/tools/freqhorn/tools/deep/DeepHorn.cpp:1:
+/usr/include/boost/multiprecision/detail/standalone_config.hpp:36:7: warning: #warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)" [-Wcpp]
+   36 |  #    warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)"
+      |       ^~~~~~~
+In file included from /usr/include/boost/math/cstdfloat/cstdfloat_types.hpp:17,
+                 from /usr/include/boost/cstdfloat.hpp:18,
+                 from /usr/include/boost/multiprecision/detail/float128_functions.hpp:15,
+                 from /usr/include/boost/multiprecision/detail/fpclassify.hpp:13,
+                 from /usr/include/boost/multiprecision/detail/default_ops.hpp:15,
+                 from /usr/include/boost/multiprecision/detail/generic_interconvert.hpp:12,
+                 from /usr/include/boost/multiprecision/number.hpp:12,
+                 from /usr/include/boost/multiprecision/cpp_int.hpp:19:
+/usr/include/boost/math/tools/config.hpp:23:6: warning: #warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)" [-Wcpp]
+   23 | #    warning "The minimum language standard to use Boost.Math will be C++14 starting in July 2023 (Boost 1.82 release)"
+      |      ^~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1210:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1210 |   struct DagVisit : public std::unary_function<Expr,Expr>
+      |                                 ^~~~~~~~~~~~~~
+In file included from /usr/include/c++/13/string:49,
+                 from /usr/include/c++/13/bits/locale_classes.h:40,
+                 from /usr/include/c++/13/bits/ios_base.h:41,
+                 from /usr/include/c++/13/ios:44,
+                 from /usr/include/c++/13/istream:40,
+                 from /usr/include/c++/13/fstream:40,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/Horn.hpp:4:
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1489:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1489 |       struct CIRCSIZE : public std::unary_function<Expr,VisitAction>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1525:46: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1525 |       struct TrivialSimplifier : public std::unary_function<Expr,Expr>
+      |                                              ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1643:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1643 |       struct GatherOps : public std::unary_function<Expr,Expr>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1701:41: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1701 |       struct NormalizeOps : public std::unary_function<Expr,Expr>
+      |                                         ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:1845:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1845 |       struct NNF : public std::unary_function<Expr,VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2376:42: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2376 |       class IsHardIntConst : public std::unary_function<Expr,bool>
+      |                                          ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2385:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2385 |       class IsFApp : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2395:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2395 |       class IsConst : public std::unary_function<Expr,bool>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2407:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2407 |        class IsVar : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2416:36: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2416 |       class IsSelect : public std::unary_function<Expr,bool>
+      |                                    ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2424:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2424 |       class IsStore : public std::unary_function<Expr,bool>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2713:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2713 |     struct RAV: public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2724:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2724 |     struct RAVALL: public std::unary_function<Expr,VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2741:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2741 |     struct RAVALLM: public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2754:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2754 |     struct RAVALLMR: public std::unary_function<Expr,VisitAction>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2770:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2770 |     struct RAVSIMP: public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2790:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2790 |     struct FV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2818:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2818 |     struct RV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2835:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2835 |     struct RVSIMP : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2863:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2863 |     struct CV : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2889:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2889 |     struct ContainsOp : public std::unary_function<Expr,VisitAction>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2906:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2906 |     struct HasUninterp : public std::unary_function<Expr,VisitAction>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2931:31: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2931 |     struct SIZE : public std::unary_function<Expr,VisitAction>
+      |                               ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:2945:29: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2945 |     struct RW : public std::unary_function<Expr,VisitAction>
+      |                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+In file included from /home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3204:
+/home/mtm20cb/tools/freqhorn/include/ufo/ExprBv.hh:181:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+  181 |       class IsVVar : public std::unary_function<Expr,bool>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3381:17: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3381 |     public std::unary_function<expr::Expr, std::size_t>
+      |                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3394:17: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3394 |     public std::unary_function<expr::Expr, std::size_t>
+      |                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3428:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3428 |     struct ABSCST : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Expr.hpp:3530:33: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3530 |     struct SUBBND : public std::unary_function<Expr,VisitAction>
+      |                                 ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:49:37: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+   49 |   struct ast_ptr_hash : public std::unary_function<ast,std::size_t>
+      |                                     ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:58:41: warning: ‘template<class _Arg1, class _Arg2, class _Result> struct std::binary_function’ is deprecated [-Wdeprecated-declarations]
+   58 |   struct ast_ptr_equal_to : public std::binary_function<ast,ast,bool>
+      |                                         ^~~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:131:12: note: declared here
+  131 |     struct binary_function
+      |            ^~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:376:30: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+  376 |   class ZModel : public std::unary_function<Expr,Expr>
+      |                              ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:1996:35: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 1996 |   struct FindNonlin : public std::unary_function<Expr, VisitAction>
+      |                                   ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2636:34: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2636 |   struct RAVSUBEXPR: public std::unary_function<Expr,VisitAction>
+      |                                  ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2738:39: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2738 |   struct SelectReplacer : public std::unary_function<Expr, VisitAction>
+      |                                       ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:2762:45: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 2762 |   struct QuantifiedVarsFilter : public std::unary_function<Expr, VisitAction>
+      |                                             ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3810:40: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3810 |   struct TransitionMiner : public std::unary_function<Expr, VisitAction>
+      |                                        ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3857:38: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3857 |   struct CondRetriever : public std::unary_function<Expr, VisitAction>
+      |                                      ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3873:40: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3873 |   struct AccessRetriever : public std::unary_function<Expr, VisitAction>
+      |                                        ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:3889:39: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 3889 |   struct DeltaRetriever : public std::unary_function<Expr, VisitAction>
+      |                                       ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/ae/ExprSimpl.hpp:4186:32: warning: ‘template<class _Arg, class _Result> struct std::unary_function’ is deprecated [-Wdeprecated-declarations]
+ 4186 |   struct QVMiner : public std::unary_function<Expr, VisitAction>
+      |                                ^~~~~~~~~~~~~~
+/usr/include/c++/13/bits/stl_function.h:117:12: note: declared here
+  117 |     struct unary_function
+      |            ^~~~~~~~~~~~~~
+In file included from /usr/include/armadillo:27,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/DataLearner.hpp:13,
+                 from /home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp:7:
+/usr/include/armadillo_bits/compiler_check.hpp:87:98: note: ‘#pragma message: INFO: support for C++11 is deprecated; minimum recommended standard is C++14’
+   87 |   #pragma message ("INFO: support for C++11 is deprecated; minimum recommended standard is C++14")
+      |                                                                                                  ^
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp: In member function ‘virtual bool ufo::RndLearnerV3::filterUnsat()’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp:664:11: error: ‘deque’ was not declared in this scope; did you mean ‘boost::container::deque’?
+  664 |           deque<Expr> def;
+      |           ^~~~~
+      |           boost::container::deque
+In file included from /usr/include/boost/lexical_cast/detail/converter_lexical.hpp:52,
+                 from /usr/include/boost/lexical_cast/try_lexical_convert.hpp:44,
+                 from /usr/include/boost/lexical_cast.hpp:50,
+                 from /home/mtm20cb/tools/freqhorn/include/ufo/Smt/Z3n.hpp:42:
+/usr/include/boost/container/container_fwd.hpp:131:7: note: ‘boost::container::deque’ declared here
+  131 | class deque;
+      |       ^~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp:664:21: error: expected primary-expression before ‘>’ token
+  664 |           deque<Expr> def;
+      |                     ^
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV3.hpp:664:23: error: ‘def’ was not declared in this scope
+  664 |           deque<Expr> def;
+      |                       ^~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: At global scope:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:28:14: error: ‘deque’ was not declared in this scope; did you mean ‘boost::container::deque’?
+   28 |     map<int, deque<Expr>> deferredCandidates;
+      |              ^~~~~
+      |              boost::container::deque
+/usr/include/boost/container/container_fwd.hpp:131:7: note: ‘boost::container::deque’ declared here
+  131 | class deque;
+      |       ^~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:28:20: error: template argument 2 is invalid
+   28 |     map<int, deque<Expr>> deferredCandidates;
+      |                    ^~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:28:20: error: template argument 4 is invalid
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:28:24: error: expected unqualified-id before ‘>’ token
+   28 |     map<int, deque<Expr>> deferredCandidates;
+      |                        ^~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘virtual bool ufo::RndLearnerV4::filterUnsat()’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:65:11: error: ‘deque’ was not declared in this scope; did you mean ‘boost::container::deque’?
+   65 |           deque<Expr> def;
+      |           ^~~~~
+      |           boost::container::deque
+/usr/include/boost/container/container_fwd.hpp:131:7: note: ‘boost::container::deque’ declared here
+  131 | class deque;
+      |       ^~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:65:21: error: expected primary-expression before ‘>’ token
+   65 |           deque<Expr> def;
+      |                     ^
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:65:23: error: ‘def’ was not declared in this scope
+   65 |           deque<Expr> def;
+      |                       ^~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:67:11: error: ‘deferredCandidates’ was not declared in this scope
+   67 |           deferredCandidates[i] = def;
+      |           ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘virtual bool ufo::RndLearnerV4::weaken(int, expr::ExprVector&, std::map<boost::intrusive_ptr<expr::ENode>, boost::logic::tribool>&, ufo::HornRuleExt*, ufo::SamplFactory&, std::function<bool(boost::intrusive_ptr<expr::ENode>, boost::logic::tribool)>, bool)’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:102:15: error: ‘deferredCandidates’ was not declared in this scope
+  102 |               deferredCandidates[invNum].push_back(*it);  //  prioritize equalities
+      |               ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:109:17: error: ‘deferredCandidates’ was not declared in this scope
+  109 |                 deferredCandidates[invNum].push_front(a);
+      |                 ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘virtual void ufo::RndLearnerV4::postBootCands(int, expr::Expr, expr::Expr)’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:128:9: error: ‘deferredCandidates’ was not declared in this scope
+  128 |         deferredCandidates[invNum].push_back(cand);
+      |         ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:131:9: error: ‘deferredCandidates’ was not declared in this scope
+  131 |         deferredCandidates[invNum].push_back(cand);
+      |         ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:133:9: error: ‘deferredCandidates’ was not declared in this scope
+  133 |         deferredCandidates[invNum].push_front(cand);
+      |         ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘virtual void ufo::RndLearnerV4::addDataCand(int, expr::Expr, expr::ExprSet&)’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:148:13: error: ‘deferredCandidates’ was not declared in this scope
+  148 |             deferredCandidates[invNum].push_front(
+      |             ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘void ufo::RndLearnerV4::annotateDT(int, expr::Expr, expr::Expr, int, int, expr::ExprVector&, expr::ExprVector&, bool)’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:286:11: error: ‘deferredCandidates’ was not declared in this scope
+  286 |           deferredCandidates[invNum].push_back(cnd);
+      |           ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp: In member function ‘virtual bool ufo::RndLearnerV4::synthesize(unsigned int)’:
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:565:25: error: ‘deferredCandidates’ was not declared in this scope
+  565 |         for (auto & a : deferredCandidates)
+      |                         ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:570:23: error: ‘deferredCandidates’ was not declared in this scope
+  570 |       for (auto & a : deferredCandidates) defSz[a.first] = a.second.size();
+      |                       ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:584:13: error: ‘deferredCandidates’ was not declared in this scope
+  584 |         if (deferredCandidates[invNum].empty())
+      |             ^~~~~~~~~~~~~~~~~~
+/home/mtm20cb/tools/freqhorn/include/deep/RndLearnerV4.hpp:601:22: error: ‘deferredCandidates’ was not declared in this scope
+  601 |                   << deferredCandidates[invNum].size() << "\n";
+      |                      ^~~~~~~~~~~~~~~~~~
+At global scope:
+cc1plus: note: unrecognized command-line option ‘-Wno-inconsistent-missing-override’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-covered-switch-default’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-sometimes-uninitialized’ may have been intended to silence earlier diagnostics
+cc1plus: note: unrecognized command-line option ‘-Wno-redeclared-class-member’ may have been intended to silence earlier diagnostics
+make[2]: *** [tools/deep/CMakeFiles/freqhorn.dir/build.make:76: tools/deep/CMakeFiles/freqhorn.dir/DeepHorn.cpp.o] Error 1
+make[1]: *** [CMakeFiles/Makefile2:994: tools/deep/CMakeFiles/freqhorn.dir/all] Error 2
+make: *** [Makefile:146: all] Error 2
+mtm20cb@device0220:~/tools/freqhorn/build$

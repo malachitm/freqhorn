@@ -1,0 +1,1 @@
+/usr/bin/c++  -O2 CMakeFiles/smoke_test.dir/smoke_test.cpp.o -o smoke_test  -Wl,-rpath,/home/mtm20cb/tools/freqhorn/armadillo-14.4.1 ../libarmadillo.so.14.4.1 /usr/lib/x86_64-linux-gnu/libopenblas.so /usr/lib/x86_64-linux-gnu/liblapack.so /usr/lib/x86_64-linux-gnu/libarpack.so /usr/lib/x86_64-linux-gnu/libsuperlu.so 

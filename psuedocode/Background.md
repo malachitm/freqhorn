@@ -1,0 +1,1 @@
+How could I prove something like "A linear recursive CHC whose transition update is equivalent to an affine transformation can be modeled as an affine system". 

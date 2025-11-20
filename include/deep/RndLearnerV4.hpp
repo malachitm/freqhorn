@@ -1,6 +1,7 @@
 #ifndef RNDLEARNERV4__HPP__
 #define RNDLEARNERV4__HPP__
 
+#include <deque>
 #include "RndLearnerV3.hpp"
 
 using namespace std;
@@ -9,8 +10,7 @@ namespace ufo
 {
   class RndLearnerV4 : public RndLearnerV3
   {
-    private:
-
+  private:
     bool dDisj;
     bool dAllMbp;
     bool dAddProp;
@@ -27,29 +27,28 @@ namespace ufo
     map<int, ExprSet> allDataCands;
     map<int, deque<Expr>> deferredCandidates;
 
-    public:
-
-    RndLearnerV4 (ExprFactory &_e, EZ3 &_z3, CHCs& _r, unsigned _to, bool _freqs,
-                  bool _aggp, int _mu, int _da, bool _d, int _m, bool _dAllMbp,
-                  bool _dAddProp, bool _dAddDat, bool _dStrenMbp, int _dFwd,
-                  bool _dR, bool _dG, int _debug) :
-      RndLearnerV3 (_e, _z3, _r, _to, _freqs, _aggp, _mu, _da, _debug),
-                  dDisj(_d), mbpEqs(_m), dAllMbp(_dAllMbp),
-                  dAddProp(_dAddProp), dAddDat(_dAddDat), dStrenMbp(_dStrenMbp),
-                  dFwd(_dFwd), dRecycleCands(_dR), dGenerous(_dG) {}
+  public:
+    RndLearnerV4(ExprFactory &_e, EZ3 &_z3, CHCs &_r, unsigned _to, bool _freqs,
+                 bool _aggp, int _mu, int _da, bool _d, int _m, bool _dAllMbp,
+                 bool _dAddProp, bool _dAddDat, bool _dStrenMbp, int _dFwd,
+                 bool _dR, bool _dG, int _debug) : RndLearnerV3(_e, _z3, _r, _to, _freqs, _aggp, _mu, _da, _debug),
+                                                   dDisj(_d), mbpEqs(_m), dAllMbp(_dAllMbp),
+                                                   dAddProp(_dAddProp), dAddDat(_dAddDat), dStrenMbp(_dStrenMbp),
+                                                   dFwd(_dFwd), dRecycleCands(_dR), dGenerous(_dG) {}
 
     bool simplLemmas() { return !dDisj; }
 
     bool filterUnsat()
     {
-      vector<HornRuleExt*> worklist;
+      vector<HornRuleExt *> worklist;
       for (int i = 0; i < invNumber; i++)
       {
         if (!u.isSat(candidates[i]))
         {
-          for (auto & hr : ruleManager.chcs)
+          for (auto &hr : ruleManager.chcs)
           {
-            if (hr.dstRelation == decls[i]) worklist.push_back(&hr);
+            if (hr.dstRelation == decls[i])
+              worklist.push_back(&hr);
           }
         }
       }
@@ -72,39 +71,40 @@ namespace ufo
       return true;
     }
 
-    bool weaken (int invNum, ExprVector& ev,
-                 map<Expr, tribool>& vals, HornRuleExt* hr, SamplFactory& sf,
-                 function<bool(Expr, tribool)> cond, bool singleCand)
+    bool weaken(int invNum, ExprVector &ev,
+                map<Expr, tribool> &vals, HornRuleExt *hr, SamplFactory &sf,
+                function<bool(Expr, tribool)> cond, bool singleCand)
     {
       bool weakened = false;
-      for (auto it = ev.begin(); it != ev.end(); )
+      for (auto it = ev.begin(); it != ev.end();)
       {
         if (cond(*it, vals[*it]))
         {
           weakened = true;
           if (printLog >= 3)
-            outs () << "    Failed cand for " << hr->dstRelation
-                    << ": " << *it << " 🔥\n";
+            outs() << "    Failed cand for " << hr->dstRelation
+                   << ": " << *it << " 🔥\n";
           if (hr->isFact && !containsOp<ARRAY_TY>(*it) &&
               !containsOp<BOOL_TY>(*it) && !findNonlin(*it))
           {
             Expr failedCand = normalizeDisj(*it, invarVarsShort[invNum]);
             if (statsInitialized)
             {
-              Sampl& s = sf.exprToSampl(failedCand);
+              Sampl &s = sf.exprToSampl(failedCand);
               sf.assignPrioritiesForFailed();
             }
-            else tmpFailed[invNum].insert(failedCand);
+            else
+              tmpFailed[invNum].insert(failedCand);
           }
           if (boot)
           {
             if (isOpX<EQ>(*it))
-              deferredCandidates[invNum].push_back(*it);  //  prioritize equalities
+              deferredCandidates[invNum].push_back(*it); //  prioritize equalities
             else
             {
               ExprSet disjs;
               getDisj(*it, disjs);
-              for (auto & a : disjs)  // to try in the `--disj` mode
+              for (auto &a : disjs) // to try in the `--disj` mode
               {
                 deferredCandidates[invNum].push_front(a);
                 deferredCandidates[invNum].push_front(mkNeg(a));
@@ -112,7 +112,8 @@ namespace ufo
             }
           }
           it = ev.erase(it);
-          if (singleCand) break;
+          if (singleCand)
+            break;
         }
         else
         {
@@ -124,16 +125,16 @@ namespace ufo
 
     void postBootCands(int invNum, Expr c, Expr cand)
     {
-      if (dAddProp)   // for QE-based propagation, the heuristic is disabled
+      if (dAddProp) // for QE-based propagation, the heuristic is disabled
         deferredCandidates[invNum].push_back(cand);
-                      // otherwise, prioritize equality cands with closed ranges
+      // otherwise, prioritize equality cands with closed ranges
       else if (isOpX<EQ>(c) && getQvit(invNum, bind::fapp(cand->arg(0)))->closed)
         deferredCandidates[invNum].push_back(cand);
       else
         deferredCandidates[invNum].push_front(cand);
     }
 
-    virtual void addDataCand(int invNum, Expr cand, ExprSet& cands)
+    virtual void addDataCand(int invNum, Expr cand, ExprSet &cands)
     {
       Expr (*ops[])(Expr, Expr) = {mk<GEQ>, mk<LEQ>};
       int sz = allDataCands[invNum].size();
@@ -141,16 +142,16 @@ namespace ufo
       bool isNew = allDataCands[invNum].size() > sz;
       if (isNew || dGenerous)
       {
-        cands.insert(cand);                               // actually, add it
+        cands.insert(cand); // actually, add it
         // also, add weaker versions of cand to deferred set
         if (dRecycleCands && !boot && isOpX<EQ>(cand))
-          for (Expr (*op) (Expr, Expr) : ops)
+          for (Expr (*op)(Expr, Expr) : ops)
             deferredCandidates[invNum].push_front(
-                          (*op)(cand->left(), cand->right()));
+                (*op)(cand->left(), cand->right()));
       }
       else if (printLog >= 3 && !boot)
-        outs () << "    Data candidate " << cand
-                << " has already appeared before\n";
+        outs() << "    Data candidate " << cand
+               << " has already appeared before\n";
     }
 
     Expr mkImplCnd(Expr pre, Expr cand, bool out = true)
@@ -161,24 +162,25 @@ namespace ufo
         Expr tmp = cand->last()->right();
         im = replaceAll(cand, tmp, mkImplCnd(pre, tmp, false));
       }
-      else im = simplifyBool(mk<IMPL>(pre, cand));
+      else
+        im = simplifyBool(mk<IMPL>(pre, cand));
       if (printLog >= 2 && out)
-        outs () << "  - - - Implication candidate: " << im
-                << (printLog >= 3 ? " 😎\n" : "\n");
+        outs() << "  - - - Implication candidate: " << im
+               << (printLog >= 3 ? " 😎\n" : "\n");
       return im;
     }
 
     Expr mkImplCndArr(int invNum, Expr mbp, Expr cnd)
     {
       Expr phaseGuardArr = mbp;
-      for (auto & q : qvits[invNum])
+      for (auto &q : qvits[invNum])
         if (contains(cnd, q->qv))
           phaseGuardArr = replaceAll(phaseGuardArr, q->iter, q->qv);
       return mkImplCnd(phaseGuardArr, cnd);
     }
 
     void internalArrProp(int invNum, Expr ind, Expr mbp, Expr cnd,
-          ExprSet& s, ExprVector& srcVars, ExprVector& dstVars, ExprSet& cands)
+                         ExprSet &s, ExprVector &srcVars, ExprVector &dstVars, ExprSet &cands)
     {
       // mainly, one strategy for `--phase-prop`:
       //   * finalizing a candidate for the next phase,
@@ -186,18 +188,20 @@ namespace ufo
       // TODO: support the reasoning for `--phase-data`
       Expr nextMbp = getMbpPost(invNum, conjoin(s, m_efac), srcVars, dstVars);
       Expr newCand = cnd;
-      if (!finalizeArrCand(newCand, nextMbp, invNum)) return;
+      if (!finalizeArrCand(newCand, nextMbp, invNum))
+        return;
       newCand = getForallCnj(eliminateQuantifiers(
-            mk<AND>(newCand, u.simplifiedAnd(ssas[invNum], nextMbp)),
-            dstVars, invNum, false));
-      if (newCand == NULL) return;
+          mk<AND>(newCand, u.simplifiedAnd(ssas[invNum], nextMbp)),
+          dstVars, invNum, false));
+      if (newCand == NULL)
+        return;
       getConj(newCand, cands);
       ExprVector newCands;
       replaceArrRangeForIndCheck(invNum, newCand, newCands, /* regress == */ true);
-      for (auto & newCand : newCands)
+      for (auto &newCand : newCands)
       {
         s = {ind, u.simplifiedAnd(ssas[invNum], nextMbp),
-            mkNeg(replaceAll(mk<AND>(ind, mbp), srcVars, dstVars))};
+             mkNeg(replaceAll(mk<AND>(ind, mbp), srcVars, dstVars))};
         nextMbp = getMbpPost(invNum, conjoin(s, m_efac), srcVars, dstVars);
         Expr candImplReg = mkImplCndArr(invNum, nextMbp, newCand);
         candidates[invNum].push_back(candImplReg);
@@ -207,18 +211,19 @@ namespace ufo
     void generatePhaseLemmas(int invNum, int cycleNum, Expr rel, Expr cnd)
     {
       if (printLog >= 2)
-        outs () << "  Try finding phase guard for " << cnd << "\n";
+        outs() << "  Try finding phase guard for " << cnd << "\n";
       if (isOpX<FORALL>(cnd))
       {
         ExprVector cnds;
-        replaceArrRangeForIndCheck (invNum, cnd, cnds);
-        if (cnds.empty()) return;
-        cnd = cnds[0];              // TODO: extend
+        replaceArrRangeForIndCheck(invNum, cnd, cnds);
+        if (cnds.empty())
+          return;
+        cnd = cnds[0]; // TODO: extend
       }
 
-      vector<int>& cycle = ruleManager.cycles[cycleNum];
-      ExprVector& srcVars = ruleManager.chcs[cycle[0]].srcVars;
-      ExprVector& dstVars = ruleManager.chcs[cycle.back()].dstVars;
+      vector<int> &cycle = ruleManager.cycles[cycleNum];
+      ExprVector &srcVars = ruleManager.chcs[cycle[0]].srcVars;
+      ExprVector &dstVars = ruleManager.chcs[cycle.back()].dstVars;
 
       vector<pair<int, int>> cur_mbps;
       int curDepth = dFwd ? INT_MAX : 0;
@@ -230,55 +235,58 @@ namespace ufo
         auto &path = mbpDt[invNum].paths[p];
         for (int m = 0; m < path.size(); m++)
         {
-          Expr fla = mk<AND>(mbpDt[invNum].getExpr(p,m),
-                             strenDt[invNum].getExpr(p,m));
+          Expr fla = mk<AND>(mbpDt[invNum].getExpr(p, m),
+                             strenDt[invNum].getExpr(p, m));
           if (m == 0)
             if (!u.implies(mk<AND>(prefs[invNum], fla), cnd))
-              continue;                            // initialization filtering
+              continue; // initialization filtering
           ExprVector filt = {mbpDt[invNum].getExpr(p, m),
-                            strenDt[invNum].getExpr(p ,m), ssas[invNum], cnd};
-          if (!u.isSat(filt))                      // consecution filtering
+                             strenDt[invNum].getExpr(p, m), ssas[invNum], cnd};
+          if (!u.isSat(filt)) // consecution filtering
             continue;
-          if (m + 1 < path.size())                 // lookahead-based filtering
+          if (m + 1 < path.size()) // lookahead-based filtering
           {
             filt.push_back(replaceAll(mk<AND>(mbpDt[invNum].getExpr(p, m + 1),
-                        strenDt[invNum].getExpr(p, m + 1)), srcVars, dstVars));
+                                              strenDt[invNum].getExpr(p, m + 1)),
+                                      srcVars, dstVars));
             if (!u.isSat(filt))
               continue;
           }
 
-          if (dAllMbp) cur_mbps.push_back({p, m});    // TODO: try other heuristics
+          if (dAllMbp)
+            cur_mbps.push_back({p, m}); // TODO: try other heuristics
           else if (((dFwd && m <= curDepth) || (!dFwd && m >= curDepth)) &&
-                    curLen > path.size())
+                   curLen > path.size())
           {
             curPath = p;
             curDepth = m;
             curLen = path.size();
             if (printLog >= 3)
-              outs () << "      updating MBP path/depth since its has "
-                      << "an earlier occurrence: ["
-                      << curPath << ", " << curDepth << "] and shorter path\n";
+              outs() << "      updating MBP path/depth since its has "
+                     << "an earlier occurrence: ["
+                     << curPath << ", " << curDepth << "] and shorter path\n";
           }
         }
       }
 
-      if (!dAllMbp && curPath >= 0) cur_mbps.push_back({curPath, curDepth});
+      if (!dAllMbp && curPath >= 0)
+        cur_mbps.push_back({curPath, curDepth});
 
       if (printLog >= 2)
       {
-        outs () << "  Total " << cur_mbps.size() << " MBP paths to try: ";
-        for (auto & c : cur_mbps)
-          outs () << "[ " << c.first << ", " << c.second  << " ], ";
-        outs () << "\n";
+        outs() << "  Total " << cur_mbps.size() << " MBP paths to try: ";
+        for (auto &c : cur_mbps)
+          outs() << "[ " << c.first << ", " << c.second << " ], ";
+        outs() << "\n";
       }
-      for (auto & c : cur_mbps)
+      for (auto &c : cur_mbps)
         for (bool dir : {true, false})
           if (dFwd == dir || dFwd == 2)
             annotateDT(invNum, rel, cnd, c.first, c.second, srcVars, dstVars, dir);
     }
 
     void annotateDT(int invNum, Expr rel, Expr cnd, int path, int depth,
-                        ExprVector& srcVars, ExprVector& dstVars, bool fwd)
+                    ExprVector &srcVars, ExprVector &dstVars, bool fwd)
     {
       if (!mbpDt[invNum].isValid(path, depth))
       {
@@ -287,32 +295,37 @@ namespace ufo
         return;
       }
       Expr mbp = mbpDt[invNum].getExpr(path, depth);
-      if (mbp == NULL) return;
+      if (mbp == NULL)
+        return;
 
       if (printLog >= 2)
-        outs () << "    Next ordered MBP: " << mbp << " [ "
-                << path << ", " << depth << " ] in "
-                << (fwd ? "forward" : "backward") << " direction\n";
+        outs() << "    Next ordered MBP: " << mbp << " [ "
+               << path << ", " << depth << " ] in "
+               << (fwd ? "forward" : "backward") << " direction\n";
 
       Expr ind = strenDt[invNum].getExpr(path, depth);
       if (printLog >= 2)
-        outs () << "    Strengthening the guard [ " << path << ", "
-                << depth << " ] with " << ind << "\n";
+        outs() << "    Strengthening the guard [ " << path << ", "
+               << depth << " ] with " << ind << "\n";
 
       Expr candImpl;
-      if (isOpX<FORALL>(cnd)) candImpl = mkImplCndArr(invNum, mbp, cnd);
-      else candImpl = mkImplCnd(mk<AND>(ind, mbp), cnd);
+      if (isOpX<FORALL>(cnd))
+        candImpl = mkImplCndArr(invNum, mbp, cnd);
+      else
+        candImpl = mkImplCnd(mk<AND>(ind, mbp), cnd);
 
-      if (find(candidates[invNum].begin(), candidates[invNum].end(), candImpl)
-           != candidates[invNum].end())
-             return;
+      if (find(candidates[invNum].begin(), candidates[invNum].end(), candImpl) != candidates[invNum].end())
+        return;
       candidates[invNum].push_back(candImpl);
 
       // use multiHoudini here to give more chances to array candidates
       auto candidatesTmp = candidates;
-      if (multiHoudini(ruleManager.dwtoCHCs)) assignPrioritiesForLearned();
-      else if (dAllMbp) candidates = candidatesTmp;
-      else return;
+      if (multiHoudini(ruleManager.dwtoCHCs))
+        assignPrioritiesForLearned();
+      else if (dAllMbp)
+        candidates = candidatesTmp;
+      else
+        return;
 
       Expr nextMbp;
       if (fwd)
@@ -321,14 +334,17 @@ namespace ufo
         {
           ExprSet tmp;
           mbpDt[invNum].getBackExprs(path, depth, tmp);
-          if (tmp.empty())  return;
+          if (tmp.empty())
+            return;
           nextMbp = disjoin(tmp, m_efac);
         }
-        else nextMbp = mbpDt[invNum].getExpr(path, depth + 1);
+        else
+          nextMbp = mbpDt[invNum].getExpr(path, depth + 1);
       }
       else
       {
-        if (depth == 0) return;
+        if (depth == 0)
+          return;
         nextMbp = mbpDt[invNum].getExpr(path, depth - 1);
       }
 
@@ -341,58 +357,59 @@ namespace ufo
       {
         ExprSet s;
         if (fwd)
-          s = { ind, u.simplifiedAnd(ssas[invNum], mbp),
-                       replaceAll(nextMbp, srcVars, dstVars) };
+          s = {ind, u.simplifiedAnd(ssas[invNum], mbp),
+               replaceAll(nextMbp, srcVars, dstVars)};
         else
-          s = { u.simplifiedAnd(ssas[invNum], nextMbp),
-                       replaceAll(mbp, srcVars, dstVars) , ind };
+          s = {u.simplifiedAnd(ssas[invNum], nextMbp),
+               replaceAll(mbp, srcVars, dstVars), ind};
 
         Expr newCand;
 
-        if (isOpX<FORALL>(cnd))      // Arrays are supported only if `fwd == 1`;
+        if (isOpX<FORALL>(cnd)) // Arrays are supported only if `fwd == 1`;
           internalArrProp(invNum, ind, mbp, cnd, s, srcVars, dstVars, cands[rel]);
         else
         {
           if (fwd)
           {
-            s.insert(cnd);        // the cand to propagate (using standard QE)
-            newCand = keepQuantifiers (conjoin(s, m_efac), dstVars);
+            s.insert(cnd); // the cand to propagate (using standard QE)
+            newCand = keepQuantifiers(conjoin(s, m_efac), dstVars);
             newCand = weakenForHardVars(newCand, dstVars);
             newCand = replaceAll(newCand, dstVars, srcVars);
           }
           else
           {
-            s.insert(mkNeg(replaceAll(cnd, srcVars, dstVars)));  // (abduction)
-            newCand = keepQuantifiers (conjoin(s, m_efac), srcVars);
+            s.insert(mkNeg(replaceAll(cnd, srcVars, dstVars))); // (abduction)
+            newCand = keepQuantifiers(conjoin(s, m_efac), srcVars);
             newCand = weakenForHardVars(newCand, srcVars);
             newCand = mkNeg(newCand);
           }
 
           newCand = u.removeITE(newCand);
-          if (isOpX<FALSE>(newCand)) return;
+          if (isOpX<FALSE>(newCand))
+            return;
           getConj(newCand, cands[rel]);
           if (printLog >= 3)
-            outs () << "  Phase propagation gave "
-                    << cands[rel].size() << " candidates to try\n";
+            outs() << "  Phase propagation gave "
+                   << cands[rel].size() << " candidates to try\n";
         }
       }
 
       ExprSet qfInvs, candsToDat;
       if (dAddDat)
       {
-        candsToDat = { mbp, ind };
+        candsToDat = {mbp, ind};
         int sz = cands[rel].size();
-        if (isOpX<FORALL>(cnd))                   // only the actual inv
-          qfInvs.insert(cnd->last()->right());    // without the phaseGuard/mbp
+        if (isOpX<FORALL>(cnd))                // only the actual inv
+          qfInvs.insert(cnd->last()->right()); // without the phaseGuard/mbp
         else
           candsToDat.insert(candImpl);
-        for (auto & inv : sfs[invNum].back().learnedExprs)   // basically, invs
+        for (auto &inv : sfs[invNum].back().learnedExprs) // basically, invs
           if (isOpX<FORALL>(inv))
             qfInvs.insert(inv->last()->right());
           else
             candsToDat.insert(inv);
         Expr candToDat = conjoin(qfInvs, m_efac);
-        for (auto & q : qvits[invNum])
+        for (auto &q : qvits[invNum])
           candToDat = replaceAll(candToDat, q->qv, q->iter); // s);
         ExprVector vars2keep;
         for (int i = 0; i < srcVars.size(); i++)
@@ -401,8 +418,8 @@ namespace ufo
         candsToDat.insert(candToDat);
         getDataCandidates(cands, rel, nextMbp, conjoin(candsToDat, m_efac), fwd);
         if (printLog >= 3)
-          outs () << "  Data Learning gave " << (cands[rel].size() - sz)
-                  << (dAddProp? "additional " : "") << " candidates to try\n";
+          outs() << "  Data Learning gave " << (cands[rel].size() - sz)
+                 << (dAddProp ? "additional " : "") << " candidates to try\n";
       }
 
       // postprocess behavioral arrCands
@@ -420,47 +437,54 @@ namespace ufo
 
       for (auto c : cands[rel])
       {
-        if (isOpX<FORALL>(cnd) && !isOpX<FORALL>(c)) continue;
+        if (isOpX<FORALL>(cnd) && !isOpX<FORALL>(c))
+          continue;
         if (isOpX<FORALL>(c))
         {
           ExprVector cnds;
-          replaceArrRangeForIndCheck (invNum, c, cnds);
-          if (cnds.empty()) continue;
+          replaceArrRangeForIndCheck(invNum, c, cnds);
+          if (cnds.empty())
+            continue;
           c = cnds[0]; //  to extend
         }
 
         annotateDT(invNum, rel, c, path, depth + (fwd ? 1 : -1),
-                    srcVars, dstVars, fwd);
+                   srcVars, dstVars, fwd);
       }
     }
 
-    void doSeedMining(Expr invRel, ExprSet& cands, set<cpp_int>& progConsts,
-                        set<cpp_int>& intCoefs)
+    void doSeedMining(Expr invRel, ExprSet &cands, set<cpp_int> &progConsts,
+                      set<cpp_int> &intCoefs)
     {
       int invNum = getVarIndex(invRel, decls);
-      ExprVector& srcVars = ruleManager.invVars[invRel];
-      ExprVector& dstVars = ruleManager.invVarsPrime[invRel];
+      ExprVector &srcVars = ruleManager.invVars[invRel];
+      ExprVector &dstVars = ruleManager.invVarsPrime[invRel];
 
-      SamplFactory& sf = sfs[invNum].back();
+      SamplFactory &sf = sfs[invNum].back();
       ExprSet candsFromCode, tmpArrCands;
       bool analyzedExtras, isFalse, hasArrays = false;
 
       for (auto &hr : ruleManager.chcs)
       {
-        if (hr.dstRelation != invRel && hr.srcRelation != invRel) continue;
-        SeedMiner sm (hr, invRel, invarVars[invNum], sf.lf.nonlinVars);
+        if (hr.dstRelation != invRel && hr.srcRelation != invRel)
+          continue;
+        SeedMiner sm(hr, invRel, invarVars[invNum], sf.lf.nonlinVars);
 
         // limit only to queries:
-        if (hr.isQuery) sm.analyzeCode();
+        if (hr.isQuery)
+          sm.analyzeCode();
         if (!analyzedExtras && hr.srcRelation == invRel)
         {
-          sm.analyzeExtras (cands);
-          sm.analyzeExtras (arrCands[invNum]);
+          sm.analyzeExtras(cands);
+          sm.analyzeExtras(arrCands[invNum]);
           analyzedExtras = true;
         }
-        for (auto &cand : sm.candidates) candsFromCode.insert(cand);
-        for (auto &a : sm.intConsts) progConsts.insert(a);
-        for (auto &a : sm.intCoefs) intCoefs.insert(a);
+        for (auto &cand : sm.candidates)
+          candsFromCode.insert(cand);
+        for (auto &a : sm.intConsts)
+          progConsts.insert(a);
+        for (auto &a : sm.intCoefs)
+          intCoefs.insert(a);
 
         // for arrays
         if (ruleManager.hasArrays[invRel])
@@ -473,12 +497,11 @@ namespace ufo
       if (hasArrays)
       {
         ExprSet repCands;
-        for (auto & a : arrCands[invNum])
+        for (auto &a : arrCands[invNum])
         {
           getQVcands(invNum, a, repCands);
         }
         arrCands[invNum] = repCands;
-
 
         // TODO: revisit handling of nested loops
         /*
@@ -522,9 +545,10 @@ namespace ufo
          */
 
         // process all quantified seeds
-        for (auto & a : tmpArrCands)
+        for (auto &a : tmpArrCands)
         {
-          if (u.isTrue(a) || u.isFalse(a)) continue;
+          if (u.isTrue(a) || u.isFalse(a))
+            continue;
           Expr replCand = replaceAllRev(a, sf.lf.nonlinVars);
           ExprSet allVars;
           getExtraVars(replCand, srcVars, allVars);
@@ -537,19 +561,19 @@ namespace ufo
               getQVcands(invNum, replCand, arrCands[invNum]);
             }
             else if (allVars.size() > 1)
-              continue;      // to extend to larger allVars
+              continue; // to extend to larger allVars
             else
-              for (auto & q : qvits[invNum])
+              for (auto &q : qvits[invNum])
                 if (typeOf(*allVars.begin()) == typeOf(q->qv))
                   arrCands[invNum].insert(
-                    replaceAll(replCand, *allVars.begin(), q->qv));
+                      replaceAll(replCand, *allVars.begin(), q->qv));
           }
         }
       }
 
       // process all quantifier-free seeds
       cands = candsFromCode;
-      for (auto & cand : candsFromCode)
+      for (auto &cand : candsFromCode)
       {
         Expr replCand = replaceAllRev(cand, sf.lf.nonlinVars);
         addCandidate(invNum, replCand);
@@ -559,15 +583,17 @@ namespace ufo
     // currently, largely based on V3's version
     bool synthesize(unsigned maxAttempts)
     {
-      if (printLog) outs () << "\nSAMPLING\n========\n";
+      if (printLog)
+        outs() << "\nSAMPLING\n========\n";
       if (printLog >= 3)
 
-        for (auto & a : deferredCandidates)
-          for (auto & b : a.second)
-            outs () << "  Deferred cand for " << a.first << ": " << b << "\n";
+        for (auto &a : deferredCandidates)
+          for (auto &b : a.second)
+            outs() << "  Deferred cand for " << a.first << ": " << b << "\n";
 
       map<int, int> defSz;
-      for (auto & a : deferredCandidates) defSz[a.first] = a.second.size();
+      for (auto &a : deferredCandidates)
+        defSz[a.first] = a.second.size();
       ExprSet cands;
       bool rndStarted = false;
       for (int i = 0; i < maxAttempts; i++)
@@ -579,12 +605,12 @@ namespace ufo
         Expr rel = ruleManager.chcs[tmp].srcRelation;
         int invNum = getVarIndex(rel, decls);
         candidates.clear();
-        SamplFactory& sf = sfs[invNum].back();
+        SamplFactory &sf = sfs[invNum].back();
         Expr cand;
         if (deferredCandidates[invNum].empty())
         {
           rndStarted = true;
-          cand = sf.getFreshCandidate();  // try simple array candidates first
+          cand = sf.getFreshCandidate(); // try simple array candidates first
         }
         else
         {
@@ -593,17 +619,20 @@ namespace ufo
         }
         if (cand != NULL && isOpX<FORALL>(cand) && isOpX<IMPL>(cand->last()))
         {
-          if (!u.isSat(cand->last()->left())) cand = NULL;
+          if (!u.isSat(cand->last()->left()))
+            cand = NULL;
         }
-        if (cand == NULL) continue;
+        if (cand == NULL)
+          continue;
         if (printLog >= 3 && dRecycleCands)
-          outs () << "Number of deferred candidates: "
-                  << deferredCandidates[invNum].size() << "\n";
+          outs() << "Number of deferred candidates: "
+                 << deferredCandidates[invNum].size() << "\n";
         if (printLog)
-          outs () << " - - - Sampled cand (#" << i << ") for "
-                  << decls[invNum] << ": "
-                  << cand << (printLog >= 3 ? " 😎\n" : "\n");
-        if (!addCandidate(invNum, cand)) continue;
+          outs() << " - - - Sampled cand (#" << i << ") for "
+                 << decls[invNum] << ": "
+                 << cand << (printLog >= 3 ? " 😎\n" : "\n");
+        if (!addCandidate(invNum, cand))
+          continue;
 
         bool lemma_found = checkCand(invNum);
         if (dDisj && (isOp<ComparissonOp>(cand) || isOpX<FORALL>(cand)))
@@ -611,7 +640,8 @@ namespace ufo
           lemma_found = true;
           generatePhaseLemmas(invNum, cycleNum, rel, cand); //, mk<TRUE>(m_efac));
           multiHoudini(ruleManager.dwtoCHCs);
-          if (printLog) outs () << "\n";
+          if (printLog)
+            outs() << "\n";
         }
         if (lemma_found)
         {
@@ -619,9 +649,10 @@ namespace ufo
           generalizeArrInvars(invNum, sf);
           if (checkAllLemmas())
           {
-            outs () << "Success after " << (i+1) << " iterations "
-                    << (rndStarted ? "(+ rnd)" :
-                       (i > defSz[invNum]) ? "(+ rec)" : "" ) << "\n";
+            outs() << "Success after " << (i + 1) << " iterations "
+                   << (rndStarted ? "(+ rnd)" : (i > defSz[invNum]) ? "(+ rec)"
+                                                                    : "")
+                   << "\n";
             printSolution();
             return true;
           }
@@ -631,8 +662,8 @@ namespace ufo
       return false;
     }
 
-    void generateMbps(int invNum, Expr ssa, ExprVector& srcVars,
-                      ExprVector& dstVars, ExprSet& cands)
+    void generateMbps(int invNum, Expr ssa, ExprVector &srcVars,
+                      ExprVector &dstVars, ExprSet &cands)
     {
       ExprVector vars2keep, prjcts, prjcts1, prjcts2;
       bool hasArray = false;
@@ -666,51 +697,54 @@ namespace ufo
           getConj(p, cands);
         }
         prjcts.push_back(p);
-        if (printLog >= 2) outs() << "Generated MBP: " << p << "\n";
+        if (printLog >= 2)
+          outs() << "Generated MBP: " << p << "\n";
       }
 
       // heuristics: to optimize the range computation
       u.removeRedundantConjunctsVec(prjcts);
 
-      for (auto p = prjcts.begin(); p != prjcts.end(); )
+      for (auto p = prjcts.begin(); p != prjcts.end();)
       {
         if (!u.isSat(prefs[invNum], *p) &&
             !u.isSat(mkNeg(*p), ssa, replaceAll(*p, srcVars, dstVars)))
-            {
-              if (printLog >= 3)
-                outs() << "Erasing MBP: " << *p
-                       << " since it is negatively inductive\n";
-              p = prjcts.erase(p);
-            }
-        else ++p;
+        {
+          if (printLog >= 3)
+            outs() << "Erasing MBP: " << *p
+                   << " since it is negatively inductive\n";
+          p = prjcts.erase(p);
+        }
+        else
+          ++p;
       }
 
       if (hasArray)
       {
-         // for array benchmarks, since more expensive
-         // otherwise, ranges won't be computed
+        // for array benchmarks, since more expensive
+        // otherwise, ranges won't be computed
         u.removeRedundantDisjuncts(prjcts);
-        if (prjcts.empty()) prjcts.push_back(mk<TRUE>(m_efac));
+        if (prjcts.empty())
+          prjcts.push_back(mk<TRUE>(m_efac));
       }
 
       for (auto p : prjcts)
         mbps[invNum].insert(simplifyArithm(p));
     }
 
-    Expr getMbpPost(int invNum, Expr ssa, ExprVector& srcVars, ExprVector& dstVars)
+    Expr getMbpPost(int invNum, Expr ssa, ExprVector &srcVars, ExprVector &dstVars)
     {
       // currently, a workaround
       // it ignores the pointers to mbps at qvits and sortedMbps
       // TODO: support
       ExprSet cur_mbps;
-      for (auto & m : mbps[invNum])
+      for (auto &m : mbps[invNum])
         if (u.isSat(replaceAll(m, srcVars, dstVars), ssa))
           cur_mbps.insert(m);
       return simplifyBool(distribDisjoin(cur_mbps, m_efac));
     }
 
-    void generateMbpDecisionTree(int invNum, ExprVector& srcVars,
-                                 ExprVector& dstVars, int f = 0)
+    void generateMbpDecisionTree(int invNum, ExprVector &srcVars,
+                                 ExprVector &dstVars, int f = 0)
     {
       int sz = mbpDt[invNum].sz;
       if (f == 0)
@@ -722,53 +756,59 @@ namespace ufo
 
       for (auto mbp = mbps[invNum].begin(); mbp != mbps[invNum].end(); ++mbp)
       {
-        if (mbpDt[invNum].hasEdge(f, *mbp)) continue;
+        if (mbpDt[invNum].hasEdge(f, *mbp))
+          continue;
         ExprSet constr;
-        if (f == 0) constr = {*mbp, prefs[invNum]};
-        else constr = {mbpDt[invNum].tree_cont[f], ssas[invNum],
-              replaceAll(mk<AND>
-                (mkNeg(mbpDt[invNum].tree_cont[f]), *mbp), srcVars, dstVars)};
+        if (f == 0)
+          constr = {*mbp, prefs[invNum]};
+        else
+          constr = {mbpDt[invNum].tree_cont[f], ssas[invNum],
+                    replaceAll(mk<AND>(mkNeg(mbpDt[invNum].tree_cont[f]), *mbp), srcVars, dstVars)};
         if (u.isSat(constr))
         {
-          if (f == 0) mbpDt[invNum].addEdge(f, *mbp);
-          else
-            if (mbpDt[invNum].getExprInPath(f, *mbp) < 0)    // to avoid cycles
-              mbpDt[invNum].addEdge(f, *mbp);
+          if (f == 0)
+            mbpDt[invNum].addEdge(f, *mbp);
+          else if (mbpDt[invNum].getExprInPath(f, *mbp) < 0) // to avoid cycles
+            mbpDt[invNum].addEdge(f, *mbp);
         }
       }
       for (; sz < mbpDt[invNum].sz; sz++)
         generateMbpDecisionTree(invNum, srcVars, dstVars, sz);
     }
 
-    void strengthenMbpDecisionTree(int invNum, ExprVector& srcVars, ExprVector& dstVars)
+    void strengthenMbpDecisionTree(int invNum, ExprVector &srcVars, ExprVector &dstVars)
     {
       strenDt[invNum] = mbpDt[invNum];
       for (int i = 0; i < strenDt[invNum].tree_cont.size(); i++)
         strenDt[invNum].tree_cont[i] = mk<TRUE>(m_efac);
-      if (!dStrenMbp) return;     // by default, strenghtening is disabled
+      if (!dStrenMbp)
+        return; // by default, strenghtening is disabled
 
-      for (auto & s : mbpDt[invNum].tree_edgs)
+      for (auto &s : mbpDt[invNum].tree_edgs)
       {
-        if (s.second.size() == 0) continue; // leaves, nothing to strenghten
+        if (s.second.size() == 0)
+          continue; // leaves, nothing to strenghten
         Expr rootStr = strenDt[invNum].tree_cont[s.first];
 
         ExprVector constr;
-        if (s.first == 0) constr = {prefs[invNum]};
-        else constr = { mbpDt[invNum].tree_cont[s.first], ssas[invNum],
-                replaceAll(mkNeg(mbpDt[invNum].tree_cont[s.first]), srcVars, dstVars) };
+        if (s.first == 0)
+          constr = {prefs[invNum]};
+        else
+          constr = {mbpDt[invNum].tree_cont[s.first], ssas[invNum],
+                    replaceAll(mkNeg(mbpDt[invNum].tree_cont[s.first]), srcVars, dstVars)};
 
-        for (auto & v : srcVars)
+        for (auto &v : srcVars)
         {
           ExprVector allStrs;
           ExprVector abdVars = {v};
-          for (auto & e : s.second)
+          for (auto &e : s.second)
           {
             Expr mbp = mbpDt[invNum].tree_cont[e];
             Expr abd = simplifyArithm(mkNeg(ufo::keepQuantifiers(
-                          mkNeg(mk<IMPL>(conjoin(constr, m_efac), mbp)), abdVars)));
+                mkNeg(mk<IMPL>(conjoin(constr, m_efac), mbp)), abdVars)));
             if (!isOpX<FALSE>(abd) &&
-              u.implies(mk<AND>(abd, ssas[invNum]), replaceAll(abd, srcVars, dstVars)))
-                allStrs.push_back(abd);
+                u.implies(mk<AND>(abd, ssas[invNum]), replaceAll(abd, srcVars, dstVars)))
+              allStrs.push_back(abd);
           }
           if (!u.isSat(allStrs))
           {
@@ -778,9 +818,9 @@ namespace ufo
               if (printLog >= 2)
               {
                 auto e = s.second[i];
-                outs () << "Found strengthening: "
-                        << strenDt[invNum].tree_cont[e] << " for "
-                        << mbpDt[invNum].tree_cont[e] << "\n";
+                outs() << "Found strengthening: "
+                       << strenDt[invNum].tree_cont[e] << " for "
+                       << mbpDt[invNum].tree_cont[e] << "\n";
               }
             }
             break;
@@ -788,18 +828,18 @@ namespace ufo
         }
         if (s.first > 0 && !isOpX<TRUE>(rootStr))
         {
-          for (auto & e : s.second)
+          for (auto &e : s.second)
             if (isOpX<TRUE>(strenDt[invNum].tree_cont[e]))
               strenDt[invNum].tree_cont[e] = rootStr;
             else
               strenDt[invNum].tree_cont[e] =
-                mk<AND>(rootStr, strenDt[invNum].tree_cont[e]);
+                  mk<AND>(rootStr, strenDt[invNum].tree_cont[e]);
         }
       }
     }
 
-    Expr generatePostcondsFromPhases(int invNum, Expr cnt, vector<int>& extMbp,
-                      Expr ssa, int p, ExprVector& srcVars, ExprVector& dstVars)
+    Expr generatePostcondsFromPhases(int invNum, Expr cnt, vector<int> &extMbp,
+                                     Expr ssa, int p, ExprVector &srcVars, ExprVector &dstVars)
     {
       auto &path = mbpDt[invNum].paths[p];
       Expr pre, phase = NULL;
@@ -827,12 +867,13 @@ namespace ufo
       return pre;
     }
 
-    bool updateRanges(int invNum, ArrAccessIter* newer)
+    bool updateRanges(int invNum, ArrAccessIter *newer)
     {
       for (int i = 0; i < qvits[invNum].size(); i++)
       {
-        auto & existing = qvits[invNum][i];
-        if (existing->iter != newer->iter) continue;
+        auto &existing = qvits[invNum][i];
+        if (existing->iter != newer->iter)
+          continue;
         Expr newra = replaceAll(newer->range, newer->qv, existing->qv);
         bool toRepl = false;
         if (u.implies(newra, existing->range))
@@ -842,12 +883,13 @@ namespace ufo
           if (newer->closed && !existing->closed)
             toRepl = true;
         }
-        if (toRepl || u.implies(existing->range, newra))// new one is more general
+        if (toRepl || u.implies(existing->range, newra)) // new one is more general
         {
           if (newer->closed || !existing->closed)
           {
             qvits[invNum][i] = newer;
-            if (printLog >= 2) outs () << "Re";     // continued in `createArrAcc`
+            if (printLog >= 2)
+              outs() << "Re"; // continued in `createArrAcc`
             return true;
           }
           if (!newer->closed && existing->closed)
@@ -858,13 +900,13 @@ namespace ufo
       return true;
     }
 
-    void initializeAux(ExprSet& cands, BndExpl& bnd, int cycleNum, Expr pref)
+    void initializeAux(ExprSet &cands, BndExpl &bnd, int cycleNum, Expr pref)
     {
-      vector<int>& cycle = ruleManager.cycles[cycleNum];
-      HornRuleExt* hr = &ruleManager.chcs[cycle[0]];
+      vector<int> &cycle = ruleManager.cycles[cycleNum];
+      HornRuleExt *hr = &ruleManager.chcs[cycle[0]];
       Expr rel = hr->srcRelation;
-      ExprVector& srcVars = hr->srcVars;
-      ExprVector& dstVars = ruleManager.chcs[cycle.back()].dstVars;
+      ExprVector &srcVars = hr->srcVars;
+      ExprVector &dstVars = ruleManager.chcs[cycle.back()].dstVars;
       assert(srcVars.size() == dstVars.size());
 
       int invNum = getVarIndex(rel, decls);
@@ -882,36 +924,41 @@ namespace ufo
         mbpDt[invNum].deleteIntermPaths();
         strengthenMbpDecisionTree(invNum, srcVars, dstVars);
         if (printLog >= 2)
-          outs () << "MBPs are organized as a decision tree (with "
-                  << mbpDt[invNum].paths.size() << " possible path(s))\n";
+          outs() << "MBPs are organized as a decision tree (with "
+                 << mbpDt[invNum].paths.size() << " possible path(s))\n";
         if (printLog >= 3)
           mbpDt[invNum].print();
       }
 
-      if (qvits[invNum].size() > 0) return;
-      if (!containsOp<ARRAY_TY>(ssas[invNum])) return;
+      if (qvits[invNum].size() > 0)
+        return;
+      if (!containsOp<ARRAY_TY>(ssas[invNum]))
+        return;
 
-      filter (ssas[invNum], bind::IsConst (),
-                                inserter(qvars[invNum], qvars[invNum].begin()));
+      filter(ssas[invNum], bind::IsConst(),
+             inserter(qvars[invNum], qvars[invNum].begin()));
       for (int i = 0; i < dstVars.size(); i++)
       {
         Expr a = srcVars[i];
         Expr b = dstVars[i];
-        if (!bind::isIntConst(a)) continue;
-        if (u.implies(ssa, mk<EQ>(a, b))) continue;
+        if (!bind::isIntConst(a))
+          continue;
+        if (u.implies(ssa, mk<EQ>(a, b)))
+          continue;
 
         if (printLog >= 3)
-          outs () << "Considering variable " << a << " as a counter \n";
+          outs() << "Considering variable " << a << " as a counter \n";
         for (int p = 0; p < mbpDt[invNum].paths.size(); p++)
         {
-          if (printLog >= 3) outs () << "MBP Path # " << p <<"\n";
+          if (printLog >= 3)
+            outs() << "MBP Path # " << p << "\n";
           Expr extPref = pref;
           vector<int> extMbp;
           tribool grows = indeterminate;
           auto &path = mbpDt[invNum].paths[p];
           for (int m = 0; m < path.size(); m++)
           {
-            Expr & mbp = mbpDt[invNum].tree_cont[path[m]];
+            Expr &mbp = mbpDt[invNum].tree_cont[path[m]];
             tribool growsCur = u.implies(mk<AND>(mbp, ssa), mk<GEQ>(b, a));
             if (growsCur != 1)
               if (!u.implies(mk<AND>(mbp, ssa), mk<GEQ>(a, b)))
@@ -920,11 +967,12 @@ namespace ufo
             if (printLog >= 3)
             {
               if (indeterminate(growsCur))
-                outs () << "  mbp 👎: " << mbp << "\n";
-              else outs () << "  mbp 👍 for " << a << ": " << mbp << "\n";
+                outs() << "  mbp 👎: " << mbp << "\n";
+              else
+                outs() << "  mbp 👍 for " << a << ": " << mbp << "\n";
             }
             bool toCont = true;
-            if (extMbp.empty())                         // new meta-phase begins
+            if (extMbp.empty()) // new meta-phase begins
             {
               grows = growsCur;
               if (!indeterminate(growsCur))
@@ -932,15 +980,15 @@ namespace ufo
                 extMbp = {m};
                 if (m > 0)
                 {
-                  extPref = u.simplifiedAnd(ssa, mbpDt[invNum].tree_cont[path[m-1]]);
-                  extPref = keepQuantifiersRepl (extPref, dstVars);
+                  extPref = u.simplifiedAnd(ssa, mbpDt[invNum].tree_cont[path[m - 1]]);
+                  extPref = keepQuantifiersRepl(extPref, dstVars);
                   extPref = u.removeITE(replaceAll(extPref, dstVars, srcVars));
                 }
               }
               toCont = false;
             }
             else if (grows == growsCur && (!indeterminate(growsCur)))
-            {                // meta-phase continues
+            { // meta-phase continues
               extMbp.push_back(m);
               toCont = false;
             }
@@ -948,23 +996,24 @@ namespace ufo
             // for the last one, or any where the cnt direction changes:
             if (!extMbp.empty() && (toCont || m == path.size() - 1))
               if (createArrAcc(rel, invNum, a, (bool)grows, extMbp, extPref,
-                generatePostcondsFromPhases(invNum, a, extMbp, ssa, p,
-                                                            srcVars, dstVars)))
-                  extMbp.clear();               // 👍 for the next phase
+                               generatePostcondsFromPhases(invNum, a, extMbp, ssa, p,
+                                                           srcVars, dstVars)))
+                extMbp.clear(); // 👍 for the next phase
           }
         }
       }
 
-      if (!qvits[invNum].empty()) ruleManager.hasArrays[rel] = true;
+      if (!qvits[invNum].empty())
+        ruleManager.hasArrays[rel] = true;
     }
   };
 
   // same as learnInvariants3, to unify somehow, maybe
   inline void learnInvariants4(string smt, unsigned maxAttempts, unsigned to,
-       bool freqs, bool aggp, int dat, int mut, bool doElim, bool doArithm,
-       bool doDisj, int doProp, int mbpEqs, bool dAllMbp, bool dAddProp,
-       bool dAddDat, bool dStrenMbp, int dFwd, bool dRec, bool dGenerous,
-       bool dSee, bool ser, int debug)
+                               bool freqs, bool aggp, int dat, int mut, bool doElim, bool doArithm,
+                               bool doDisj, int doProp, int mbpEqs, bool dAllMbp, bool dAddProp,
+                               bool dAddDat, bool dStrenMbp, int dFwd, bool dRec, bool dGenerous,
+                               bool dSee, bool ser, int debug)
   {
     ExprFactory m_efac;
     EZ3 z3(m_efac);
@@ -977,7 +1026,8 @@ namespace ufo
       ruleManager.serialize();
       return;
     }
-    if (!res) return;
+    if (!res)
+      return;
 
     if (ruleManager.hasBV)
     {
@@ -997,31 +1047,37 @@ namespace ufo
     for (int i = 0; i < ruleManager.cycles.size(); i++)
     {
       Expr dcl = ruleManager.chcs[ruleManager.cycles[i][0]].srcRelation;
-      if (ds.initializedDecl(dcl)) continue;
+      if (ds.initializedDecl(dcl))
+        continue;
       ds.initializeDecl(dcl);
-      if (!dSee) continue;
+      if (!dSee)
+        continue;
 
       Expr pref = bnd.compactPrefix(i);
       ExprSet tmp;
       getConj(pref, tmp);
-      for (auto & t : tmp)
+      for (auto &t : tmp)
         if (hasOnlyVars(t, ruleManager.invVars[dcl]))
           cands[dcl].insert(t);
 
-      if (mut > 0) ds.mutateHeuristicEq(cands[dcl], cands[dcl], dcl, true);
+      if (mut > 0)
+        ds.mutateHeuristicEq(cands[dcl], cands[dcl], dcl, true);
       ds.initializeAux(cands[dcl], bnd, i, pref);
     }
-    if (dat > 0) ds.getDataCandidates(cands);
+    if (dat > 0)
+      ds.getDataCandidates(cands);
 
-    for (auto & dcl: ruleManager.wtoDecls)
+    for (auto &dcl : ruleManager.wtoDecls)
     {
       for (int i = 0; i < doProp; i++)
-        for (auto & a : cands[dcl]) ds.propagate(dcl, a, true);
+        for (auto &a : cands[dcl])
+          ds.propagate(dcl, a, true);
       ds.addCandidates(dcl, cands[dcl]);
       ds.prepareSeeds(dcl, cands[dcl]);
     }
 
-    if (ds.bootstrap()) return;
+    if (ds.bootstrap())
+      return;
 
     ds.calculateStatistics();
     ds.deferredPriorities();

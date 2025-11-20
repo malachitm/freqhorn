@@ -894,6 +894,22 @@ namespace ufo
             }
             return u.isSat(exprs);
         }
+
+        boost::tribool checkFact(int i, map<int, ExprVector> &annotations)
+        {
+            return checkCHC2(*fc[i], annotations, true);
+        }
+
+        boost::tribool checkConsecution(int i, map<int, ExprVector> &annotations)
+        {
+            return checkCHC2(*tr[i], annotations, true);
+        }
+
+        boost::tribool checkQuery(int i, map<int, ExprVector> &annotations)
+        {
+            return checkCHC2(*tr[i], annotations, true);
+        }
+
         bool checkAllCHCs(int i, Expr x)
         {
             assert(i < invNumber);

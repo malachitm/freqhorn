@@ -1237,6 +1237,12 @@ namespace ufo
             updateCategorizationOfCHCs(i); // Update the categorization of CHCs for this invariant
         }
 
+        ExprVector getQueryVariables(int i)
+        {
+            assert(i < invNumber);
+            return qr[i]->srcVars;
+        }
+
         void redefineDeclAndVars(Expr rel, ExprVector &args, int i)
         {
             ExprVector types;
@@ -1282,7 +1288,11 @@ namespace ufo
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
         ruleManager.print(true);
         ds.generatePolarFile2(ruleManager, "out.prob");
-        outs() << "Testing a New Function\n";
+        auto test = ds.getQueryVariables(i);
+        for (auto x : test)
+        {
+            outs() << x << "\n";
+        }
         /* TODO:
             Use boost algorithm instead of this home-written function
          */
@@ -1290,15 +1300,15 @@ namespace ufo
         // Note: we may just generate a json file for convenience, but eh whatever
 
         outs() << "Results for \"python version\": " << output_test << "\n";
-        std::vector<std::string> lines;
-        boost::algorithm::split(lines, output_test, is_cntrl());
-        for (std::string l : lines)
-        {
+        // std::vector<std::string> lines;
+        // boost::algorithm::split(lines, output_test, is_cntrl());
+        // for (std::string l : lines)
+        /*{
             if (l[0] == '_')
             {
                 outs() << "Root found: " << l << "\n";
             }
-        }
+        }*/
 
         /* TODO:
             Implement dReal and have it be able to check whether the property holds.
@@ -1309,10 +1319,16 @@ namespace ufo
         // Include new variables in the CHC systems using the information in lines.
         // tools that may be useful:
         //      regex_match
-        nlohmann::json test = nlohmann::json::parse(output_test);
-        outs() << "Here, we just read in the data from the recurrence solver" << "\n";
-        outs() << "This is what it is:" << "\n";
-        outs() << test.dump(4) << "\n";
+        nlohmann::json closedformJson = nlohmann::json::parse(output_test);
+        if (debug >= 3)
+        {
+            outs() << "Here is the closed form data:" << "\n";
+            outs() << closedformJson.dump(4) << "\n";
+        }
+
+        // Create formula for invariant
+        // for (auto v :)
+
         exit(EXIT_SUCCESS);
         for (auto i : ds.invarVarsShort[i])
         {

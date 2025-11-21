@@ -74,6 +74,8 @@ namespace ufo
         map<int, ExprVector> auxVarsPr;
         map<int, int> auxVarsSz;
 
+        std::vector<std::vector<std::string>> polarVarNames;
+
     public:
         RndLearnerV5(ExprFactory &_e, EZ3 &_z3, CHCs &_r, unsigned _to, int _debug) : RndLearnerV4(_e, _z3, _r, _to, false, false, 0, 0, false, 0, false, false,
                                                                                                    false, false, 0, 0, false, _debug) {}
@@ -433,7 +435,7 @@ namespace ufo
             }
         }
 
-        void generatePolarFile2(ufo::CHCs &ruleManager, const std::string &outputFilename)
+        void generatePolarFile2(ufo::CHCs &ruleManager, const std::string &outputFilename, int myinv = 0)
         {
             ufo::HornRuleExt *factRule = nullptr;
             ufo::HornRuleExt *inductiveRule = nullptr;
@@ -682,9 +684,15 @@ namespace ufo
             if (!loopLhsVars.empty())
             {
                 polarProgram << "    ";
+                // This program assumes that the polar variables for each invariant are generated in order
+                assert(polarVarNames.size() < invNumber);
+                assert(polarVarNames.size() == myinv);
+                polarVarNames.push_back(std::vector<std::string>());
                 for (size_t i = 0; i < loopLhsVars.size(); ++i)
                 {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(loopLhsVars[i]);
+                    std::string s = boost::algorithm::to_lower_copy(loopLhsVars[i]);
+                    polarProgram << (i == 0 ? "" : ", ") << s;
+                    polarVarNames.back().push_back(s);
                 }
                 polarProgram << " = ";
                 for (size_t i = 0; i < loopRhsStrings.size(); ++i)
@@ -1237,10 +1245,26 @@ namespace ufo
             updateCategorizationOfCHCs(i); // Update the categorization of CHCs for this invariant
         }
 
-        ExprVector getQueryVariables(int i)
+        // For version 0.0, this only grabs variables that are inside of the body
+        // of the body of query
+        std::string getCallToPolar(int i)
         {
             assert(i < invNumber);
-            return qr[i]->srcVars;
+            ExprVector allVar = qr[i]->srcVars;
+            ExprVector bodyVar;
+            std::copy_if(allVar.begin(), allVar.end(), std::back_inserter(bodyVar),
+                         [&](Expr e)
+                         { return contains(qr[i]->body, e); });
+            // Use absolute path instead of ~ to ensure proper expansion in popen/system
+            const char *home = std::getenv("HOME");
+            std::string call(home ? std::string(home) + "/tools/freqhorn/tools/polar/.venv/bin/python3 " : "");
+            call += home ? std::string(home) + "/tools/freqhorn/tools/polar/closedforms2.py" : "~/tools/freqhorn/tools/polar/closedforms2.py";
+            call += " ./out.prob";
+            call += std::accumulate(bodyVar.begin(), bodyVar.end(), string(),
+                                    [&](std::string &a, Expr b)
+                                    { return a += " " + boost::algorithm::to_lower_copy(getVarName(b)); });
+            // outs() << call << "\n";
+            return call;
         }
 
         void redefineDeclAndVars(Expr rel, ExprVector &args, int i)
@@ -1284,32 +1308,26 @@ namespace ufo
 
         ruleManager.print(true);
         int i = 0; // invariant number we want to look at
+        // TODO:
+        // There's actually a non-zero probability that I don't need to add the update
+        // for the index inside of the query. Just as a heads up.
         ds.addIndex(i);
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
         ruleManager.print(true);
         ds.generatePolarFile2(ruleManager, "out.prob");
-        auto test = ds.getQueryVariables(i);
-        for (auto x : test)
-        {
-            outs() << x << "\n";
-        }
         /* TODO:
             Use boost algorithm instead of this home-written function
          */
-        std::string output_test = exec("~/tools/freqhorn/tools/polar/.venv/bin/python3 ~/tools/freqhorn/tools/polar/closedforms2.py ./out.prob _fh_0 _fh_1 _fh_2");
-        // Note: we may just generate a json file for convenience, but eh whatever
-
-        outs() << "Results for \"python version\": " << output_test << "\n";
-        // std::vector<std::string> lines;
-        // boost::algorithm::split(lines, output_test, is_cntrl());
-        // for (std::string l : lines)
-        /*{
-            if (l[0] == '_')
-            {
-                outs() << "Root found: " << l << "\n";
-            }
+        // std::system(ds.getCallToPolar(i).c_str());
+        std::string output_test = exec(ds.getCallToPolar(i).c_str());
+        // outs() << ds.getCallToPolar(i) << "\n";
+        /*if (debug > 3)
+        {
+            outs() << "Results for \"python version\": " << output_test << "\n";
         }*/
 
+        // std::vector<std::string> lines;
+        // boost::algorithm::split(lines, output_test, is_cntrl());
         /* TODO:
             Implement dReal and have it be able to check whether the property holds.
             For the time being, create a built-in max for how many times this algorithm
@@ -1320,14 +1338,11 @@ namespace ufo
         // tools that may be useful:
         //      regex_match
         nlohmann::json closedformJson = nlohmann::json::parse(output_test);
-        if (debug >= 3)
+        if (debug >= 0)
         {
             outs() << "Here is the closed form data:" << "\n";
             outs() << closedformJson.dump(4) << "\n";
         }
-
-        // Create formula for invariant
-        // for (auto v :)
 
         exit(EXIT_SUCCESS);
         for (auto i : ds.invarVarsShort[i])

@@ -1268,6 +1268,34 @@ namespace ufo
             return call;
         }
 
+        std::map<std::string, Expr> insertRoots(int i, nlohmann::json &closedformJson)
+        {
+            assert(i < invNumber);
+            std::map<std::string, Expr> rootMap;
+            size_t rootCount = 0;
+            for (const auto &v : closedformJson)
+            {
+                if (!v.is_array())
+                    continue;
+
+                for (const auto &item : v)
+                {
+                    if (!item.contains("bases") || !item["bases"].is_array())
+                        continue;
+
+                    for (const auto &base : item["bases"])
+                    {
+                        std::string baseStr = base.get<std::string>();
+                        if (!rootMap.count(baseStr))
+                        {
+                            rootMap[baseStr] = addRoot(i, baseStr, rootCount++);
+                        }
+                    }
+                }
+            }
+            return rootMap;
+        }
+
         void redefineDeclAndVars(Expr rel, ExprVector &args, int i)
         {
             ExprVector types;
@@ -1348,7 +1376,9 @@ namespace ufo
         // insert all data into the CHC system and create the first part of the invariant
         // with the bounds
 
+        std::map<std::string, Expr> rootMap = ds.insertRoots(i, closedformJson);
         ExprSet initialClauses;
+        // each variable that has a closed form
         for (auto v : closedformJson)
         {
             // get variable using the name of the variable stored in v
@@ -1371,6 +1401,7 @@ namespace ufo
                 var = *itr;
             }
 
+            // each closed form for each variable
             for (size_t idx = 0; idx < v.size(); idx++)
             {
                 Expr cond;
@@ -1383,12 +1414,13 @@ namespace ufo
                 {
                     cond = mkTerm<EQ>(index, curr_idx)
                 }
-                for (auto cf : v[idx])
+                // each
+                for (size_t jdx = 0; jdx < v[idx]["coeffs"].size(); jdx++)
                 {
-                    // The closed form for this one
-                    if (cf["coeff"].size() == 1 && cf["bases"].size() == 0)
+                    // The closed form for a constant
+                    if (v[idx]["coeffs"].size() == 1 && v[idx]["bases"].size() == 0)
                     {
-                        Expr constant = z3_from_smtlib(cf["bases"][0].get<std::string>());
+                        Expr constant = z3_from_smtlib(v[idx]["coeffs"][0].get<std::string>());
                         Expr closed = mk<EQ>(var, constant);
                         initialClauses.insert(closed);
                     }

@@ -1121,7 +1121,7 @@ namespace ufo
             return myRealRoot;
         }
 
-        void addIndex(int i)
+        Expr addIndex(int i)
         {
             assert(i < invNumber);
             // --- Define the counter variable ---
@@ -1243,6 +1243,7 @@ namespace ufo
             }
 
             updateCategorizationOfCHCs(i); // Update the categorization of CHCs for this invariant
+            return myRealCounter
         }
 
         // For version 0.0, this only grabs variables that are inside of the body
@@ -1311,7 +1312,7 @@ namespace ufo
         // TODO:
         // There's actually a non-zero probability that I don't need to add the update
         // for the index inside of the query. Just as a heads up.
-        ds.addIndex(i);
+        Expr index = ds.addIndex(i);
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
         ruleManager.print(true);
         ds.generatePolarFile2(ruleManager, "out.prob");
@@ -1342,6 +1343,27 @@ namespace ufo
         {
             outs() << "Here is the closed form data:" << "\n";
             outs() << closedformJson.dump(4) << "\n";
+        }
+
+        // insert all data into the CHC system and create the first part of the invariant
+        // with the bounds
+
+        ExprSet initialClauses;
+        for (auto v : closedformJson)
+        {
+            for (size_t idx = 0; idx < v.size(); idx++)
+                Expr cond;
+            if (v[idx] + 1 == v.size())
+            {
+                cond = mkTerm<GEQ>()
+            }
+            // The closed form for this one
+            if (v["coeff"].size() == 1 && v["bases"].size() == 0)
+            {
+                Expr cf = z3_from_smtlib(v["bases"][0].get<std::string>());
+                initialClauses.insert(cf);
+            }
+            for (size_t idx = 0;)
         }
 
         exit(EXIT_SUCCESS);

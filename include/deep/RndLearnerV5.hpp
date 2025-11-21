@@ -1351,19 +1351,49 @@ namespace ufo
         ExprSet initialClauses;
         for (auto v : closedformJson)
         {
+            // get variable using the name of the variable stored in v
+            auto is_equal = [&](Expr var)
+            {
+                return ds.getVarName(var) == v.get<std::string>();
+            };
+            std::iterator<Expr> itr = std::find_if(
+                ds.invarVarsShort[i].begin(),
+                ds.invarVarsShort[i].end(),
+                is_equal);
+            Expr var;
+            if (itr == ds.invarVarsShort[i].end())
+            {
+                outs() << "Variable " << v.get<std::string>() << " not found in invariant variables.\n";
+                continue; // Skip to the next variable if not found
+            }
+            else
+            {
+                var = *itr;
+            }
+
             for (size_t idx = 0; idx < v.size(); idx++)
+            {
                 Expr cond;
-            if (v[idx] + 1 == v.size())
-            {
-                cond = mkTerm<GEQ>()
+                Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
+                if (v[idx] + 1 == v.size())
+                {
+                    cond = mkTerm<GEQ>(index, curr_idx);
+                }
+                else
+                {
+                    cond = mkTerm<EQ>(index, curr_idx)
+                }
+                for (auto cf : v[idx])
+                {
+                    // The closed form for this one
+                    if (cf["coeff"].size() == 1 && cf["bases"].size() == 0)
+                    {
+                        Expr constant = z3_from_smtlib(cf["bases"][0].get<std::string>());
+                        Expr closed = mk<EQ>(var, constant);
+                        initialClauses.insert(closed);
+                    }
+                }
             }
-            // The closed form for this one
-            if (v["coeff"].size() == 1 && v["bases"].size() == 0)
-            {
-                Expr cf = z3_from_smtlib(v["bases"][0].get<std::string>());
-                initialClauses.insert(cf);
-            }
-            for (size_t idx = 0;)
         }
 
         exit(EXIT_SUCCESS);

@@ -1004,12 +1004,13 @@ namespace ufo
             Expr indexInc = mk<EQ>(auxVarsPr[inv][0], mk<PLUS>(auxVars[inv][0], mkTerm(mpq_class("1"), m_efac)));
         }
 
-        Expr addRoot(int i, std::string rootVal, size_t rootCount)
+        Expr addRoot(int i, std::string rootVal, size_t rootCount, EZ3 &z3)
         {
             /* TODO:
                 Support roots that are complex, this assumes all roots are real due
                 to how it writes the update
             */
+            outs() << "Adding root " << rootVal << " to invariant #" << i << "\n";
             assert(i < invNumber);
             // --- Define the counter variable ---
             std::string rootBaseName = "_r_" + std::to_string(rootCount);
@@ -1017,10 +1018,14 @@ namespace ufo
             Expr rootNamePrimedExpr = mkTerm<string>(rootBaseName + "'", m_efac);
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
-            Expr myRootUpdate = z3_from_smtlib(m_z3, rootVal);
+            outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
+            Expr myRootUpdate = z3_from_smtlib(z3, rootVal);
+            outs() << "Root update expression: " << myRootUpdate << "\n";
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
 
+            outs() << "Added symbolic roots\n";
+            outs() << "Now adding to rules\n";
             for (auto &hr : ruleManager.chcs)
             {
                 // --- Modify the Fact ---
@@ -1056,6 +1061,7 @@ namespace ufo
                         ruleManager.invVarsPrime[relationName].push_back(myRealRootPrime);
                         ruleManager.addDeclAndVars(relationName, updatedQueryDstUnprimedVars);
                     }
+                    outs() << "Updated ruleManager for relation: " << relationName << "\n";
                 }
 
                 // --- Modify the Transition Rule ---
@@ -1243,7 +1249,7 @@ namespace ufo
             }
 
             updateCategorizationOfCHCs(i); // Update the categorization of CHCs for this invariant
-            return myRealCounter
+            return myRealCounter;
         }
 
         // For version 0.0, this only grabs variables that are inside of the body
@@ -1268,27 +1274,36 @@ namespace ufo
             return call;
         }
 
-        std::map<std::string, Expr> insertRoots(int i, nlohmann::json &closedformJson)
+        std::map<std::string, Expr> insertRoots(int i, nlohmann::json &closedformJson, EZ3 &z3)
         {
             assert(i < invNumber);
             std::map<std::string, Expr> rootMap;
             size_t rootCount = 0;
             for (const auto &v : closedformJson)
             {
+                outs() << "Processing variable: " << v.dump(4) << "\n";
                 if (!v.is_array())
                     continue;
 
                 for (const auto &item : v)
                 {
+                    outs() << "Processing item: " << item.dump(4) << "\n";
                     if (!item.contains("bases") || !item["bases"].is_array())
                         continue;
 
                     for (const auto &base : item["bases"])
                     {
+
                         std::string baseStr = base.get<std::string>();
+                        outs() << "About to check if " << baseStr << " is in the map yet...\n";
                         if (!rootMap.count(baseStr))
                         {
-                            rootMap[baseStr] = addRoot(i, baseStr, rootCount++);
+                            outs() << "It wasn't! Inserting root " << baseStr << " into map\n";
+                            rootMap[baseStr] = addRoot(i, baseStr, rootCount++, z3);
+                        }
+                        else
+                        {
+                            outs() << "It was already in the map, skipping insertion for root " << baseStr << "\n";
                         }
                     }
                 }
@@ -1318,10 +1333,14 @@ namespace ufo
     {
         ExprFactory m_efac;
         EZ3 z3(m_efac);
+
         SMTUtils u(m_efac);
 
         CHCs ruleManager(m_efac, z3, debug - 2);
         auto res = ruleManager.parse(smt, doElim, doArithm);
+        // std::string s("(div 10 2)");
+        // Expr test = z3_from_smtlib(z3, s);
+        // outs() << "Test expression: " << test << "\n";
 
         RndLearnerV5 ds(m_efac, z3, ruleManager, to, debug);
 
@@ -1340,7 +1359,7 @@ namespace ufo
         // TODO:
         // There's actually a non-zero probability that I don't need to add the update
         // for the index inside of the query. Just as a heads up.
-        Expr index = ds.addIndex(i);
+
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
         ruleManager.print(true);
         ds.generatePolarFile2(ruleManager, "out.prob");
@@ -1375,18 +1394,23 @@ namespace ufo
 
         // insert all data into the CHC system and create the first part of the invariant
         // with the bounds
-
-        std::map<std::string, Expr> rootMap = ds.insertRoots(i, closedformJson);
+        outs() << "About to add Index...\n";
+        Expr index = ds.addIndex(i);
+        outs() << "Added Index\n";
+        outs() << "About to add symbolic roots...\n";
+        std::map<std::string, Expr> rootMap = ds.insertRoots(i, closedformJson, z3);
+        outs() << "Added symbolic roots\n";
         ExprSet initialClauses;
         // each variable that has a closed form
         for (auto v : closedformJson)
         {
+            outs() << "Variable" << v.dump(4) << "\n";
             // get variable using the name of the variable stored in v
             auto is_equal = [&](Expr var)
             {
                 return ds.getVarName(var) == v.get<std::string>();
             };
-            std::iterator<Expr> itr = std::find_if(
+            auto itr = std::find_if(
                 ds.invarVarsShort[i].begin(),
                 ds.invarVarsShort[i].end(),
                 is_equal);
@@ -1401,6 +1425,8 @@ namespace ufo
                 var = *itr;
             }
 
+            outs() << "Found variable" << *var << "\n";
+
             // each closed form for each variable
             for (size_t idx = 0; idx < v.size(); idx++)
             {
@@ -1408,26 +1434,28 @@ namespace ufo
                 Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
                 if (v[idx] + 1 == v.size())
                 {
-                    cond = mkTerm<GEQ>(index, curr_idx);
+                    cond = mk<GEQ>(index, curr_idx);
                 }
                 else
                 {
-                    cond = mkTerm<EQ>(index, curr_idx)
+                    cond = mk<EQ>(index, curr_idx);
                 }
+                outs() << "Condition: " << *cond << "\n";
                 // each
                 for (size_t jdx = 0; jdx < v[idx]["coeffs"].size(); jdx++)
                 {
                     // The closed form for a constant
                     if (v[idx]["coeffs"].size() == 1 && v[idx]["bases"].size() == 0)
                     {
-                        Expr constant = z3_from_smtlib(v[idx]["coeffs"][0].get<std::string>());
+                        Expr constant = z3_from_smtlib(z3, v[idx]["coeffs"][0].get<std::string>());
                         Expr closed = mk<EQ>(var, constant);
                         initialClauses.insert(closed);
                     }
                 }
+                outs() << "Finished adding formulas to clauses.\n";
             }
         }
-
+        ruleManager.print(true);
         exit(EXIT_SUCCESS);
         for (auto i : ds.invarVarsShort[i])
         {

@@ -1046,7 +1046,7 @@ namespace ufo
                     getConj(hr.body, bodyConjuncts); // Get existing conjuncts
 
                     // Create 0 real literal
-                    Expr oneReal = mkTerm(mpq_class("1.0"), m_efac);
+                    Expr oneReal = mkTerm(mpq_class("1"), m_efac);
                     Expr initConstraint = mk<EQ>(oneReal, myRealRootPrime);
                     bodyConjuncts.insert(initConstraint);
 
@@ -1331,6 +1331,31 @@ namespace ufo
             }
         }
 
+        Expr replaceUniqueVariable(Expr expr, Expr newVar)
+        {
+            ExprSet vars;
+            filter(expr, bind::IsConst(), inserter(vars, vars.begin()));
+
+            if (vars.empty())
+            {
+                outs() << "Warning: No variables found in expression\n";
+                return expr;
+            }
+
+            if (vars.size() > 1)
+            {
+                outs() << "Warning: Expression has multiple variables, replacing all\n";
+            }
+
+            ExprMap replacements;
+            for (const Expr &var : vars)
+            {
+                replacements[var] = newVar;
+            }
+
+            return replaceAll(expr, replacements);
+        }
+
         /*
         std::unordered_map<std::string, Expr> extractEqualityMap(const ExprVector &assertions)
         {
@@ -1377,6 +1402,7 @@ namespace ufo
 
             outfile << "(set-logic QF_LIRA)\n";
             outfile << "(declare-const _x Real)\n";
+            outfile << "(declare-const n Real)";
             outfile << "(assert (= _x " << exprString << "))\n";
             outfile << "(check-sat)\n";
             outfile.close();
@@ -1446,6 +1472,7 @@ namespace ufo
          */
         // std::system(ds.getCallToPolar(i).c_str());
         std::string output_test = exec(ds.getCallToPolar(i).c_str());
+        outs() << output_test << "\n";
         // outs() << ds.getCallToPolar(i) << "\n";
         /*if (debug > 3)
         {
@@ -1486,7 +1513,7 @@ namespace ufo
             // get variable using the name of the variable stored in v
             auto is_equal = [&](Expr var)
             {
-                return ds.getVarName(var) == name;
+                return boost::algorithm::to_lower_copy(ds.getVarName(var)) == name;
             };
             auto itr = std::find_if(
                 ds.invarVarsShort[i].begin(),
@@ -1503,14 +1530,15 @@ namespace ufo
                 var = *itr;
             }
 
-            outs() << "Found variable" << *var << "\n";
+            outs() << "Found variable " << *var << "\n";
 
             // each closed form for each variable
-            for (size_t idx = 0; idx < v.size(); idx++)
+            size_t idx = 0;
+            for (auto itr = v.begin(); itr != v.end(); ++itr)
             {
                 Expr cond;
                 Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
-                if (v[idx] + 1 == v.size())
+                if (std::next(itr) == v.end())
                 {
                     cond = mk<GEQ>(index, curr_idx);
                 }
@@ -1519,18 +1547,47 @@ namespace ufo
                     cond = mk<EQ>(index, curr_idx);
                 }
                 outs() << "Condition: " << *cond << "\n";
-                // each
-                for (size_t jdx = 0; jdx < v[idx]["coeffs"].size(); jdx++)
+
+                size_t jdx = 0;
+                Expr sum;
+                for (auto base_itr = v[idx]["bases"].begin(), coeff_itr = v[idx]["coeffs"].begin();
+                     base_itr != v[idx]["bases"].end(), coeff_itr != v[idx]["coeffs"].end(); ++base_itr,
+                          ++coeff_itr)
                 {
-                    // The closed form for a constant
-                    if (v[idx]["coeffs"].size() == 1 && v[idx]["bases"].size() == 0)
+                    outs() << "Base: " << base_itr->dump(4) << "\n";
+                    outs() << "Coeff: " << coeff_itr->dump(4) << "\n";
+                    std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
+                    std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
+                    Expr t = ds.z3_parse_expression_via_file(z3, c_str);
+                    Expr c = ds.replaceUniqueVariable(t, index);
+                    Expr b = rootMap[b_str];
+                    outs() << *c << " " << *b << "\n";
+                    jdx++;
+                }
+
+                // for (size_t jdx = 0; jdx < v[idx]["coeffs"].size(); jdx++)
+                //{
+                //  The closed form for a constant
+                /*
+                if (v[idx]["coeffs"].size() == 1 && v[idx]["bases"].size() == 0)
+                {
+                    if (v[idx]["coeffs"][0].is_string())
                     {
-                        Expr constant = z3_from_smtlib(z3, v[idx]["coeffs"][0].get<std::string>());
+                        Expr constant = ds.z3_parse_expression_via_file(z3, v[idx]["coeffs"][0].get<std::string>());
+                        Expr closed = mk<EQ>(var, constant);
+                        initialClauses.insert(closed);
+                    }
+                    else if (v[idx]["coeffs"][0].is_number())
+                    {
+                        Expr constant = mkTerm(mpq_class(v[idx]["coeffs"][0].get<std::string>()), m_efac);
                         Expr closed = mk<EQ>(var, constant);
                         initialClauses.insert(closed);
                     }
                 }
+                */
+                //}
                 outs() << "Finished adding formulas to clauses.\n";
+                idx++;
             }
         }
         ruleManager.print(true);

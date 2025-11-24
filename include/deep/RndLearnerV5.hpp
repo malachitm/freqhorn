@@ -16,6 +16,10 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <iostream>
+#include <string>
+#include <utility>     // for std::pair
+#include <type_traits> // for std::is_arithmetic_v
 using namespace std;
 using namespace boost;
 
@@ -60,6 +64,19 @@ std::string exec(const char *cmd)
 
 namespace ufo
 {
+    template <typename T>
+    struct NumericPairAlias
+    {
+        // Check that T is a number (int, float, double, etc.)
+        static_assert(std::is_arithmetic<T>::value, "Template type must be numeric");
+
+        // Define the type
+        using Type = std::pair<T, expr::Expr>;
+    };
+
+    // A helper alias to make usage cleaner: MyPair<int>
+    template <typename T>
+    using numExpr_t = typename NumericPairAlias<T>::Type;
     class RndLearnerV5 : public RndLearnerV4
     {
     private:
@@ -903,22 +920,37 @@ namespace ufo
                 }
                 exprs.insert(disjoin(negged, m_efac));
             }
+
+            if (u.isSat(exprs))
+            {
+                std::cout << "Formula is SAT. Model:\n";
+
+                // Retrieve model as an expression tree of equalities
+                Expr modelExpr = u.getModel();
+
+                // Print the model to stdout
+                if (modelExpr)
+                {
+                    u.print(modelExpr, std::cout);
+                    std::cout << std::endl;
+                }
+            }
             return u.isSat(exprs);
         }
 
         boost::tribool checkFact(int i, map<int, ExprVector> &annotations)
         {
-            return checkCHC2(*fc[i], annotations, true);
+            return !checkCHC2(*fc[i], annotations, true);
         }
 
         boost::tribool checkConsecution(int i, map<int, ExprVector> &annotations)
         {
-            return checkCHC2(*tr[i], annotations, true);
+            return !checkCHC2(*tr[i], annotations, true);
         }
 
         boost::tribool checkQuery(int i, map<int, ExprVector> &annotations)
         {
-            return checkCHC2(*qr[i], annotations, true);
+            return !checkCHC2(*qr[i], annotations, true);
         }
 
         bool checkAllCHCs(int i, Expr x)
@@ -1022,7 +1054,15 @@ namespace ufo
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
             outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
-            Expr myRootUpdate = z3_parse_expression_via_file(z3, rootVal);
+            Expr myRootUpdate = expr_from_string(z3, rootVal);
+            if (isOpX<expr::op::DIV>(myRootUpdate))
+            {
+                Expr left = myRootUpdate->left();
+                Expr right = myRootUpdate->right();
+                outs() << "Root Type: " << typeid(myRootUpdate->op()).name() << "\n";
+                outs() << "Numerator Type: " << typeid(left->op()).name() << "\n";
+                outs() << "Denominator Type: " << typeid(right->op()).name() << "\n";
+            }
             outs() << "Root update expression: " << myRootUpdate << "\n";
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
@@ -1389,7 +1429,7 @@ namespace ufo
         }
         */
         template <typename Z>
-        Expr z3_parse_expression_via_file(Z &z3, const std::string &exprString)
+        Expr expr_from_string(Z &z3, const std::string &exprString)
         {
             const char *tmpfile = "/tmp/z3_expr_temp.smt2";
 
@@ -1431,21 +1471,132 @@ namespace ufo
             outs() << "Warning: Unexpected result structure\n";
             return result;
         }
+
+        double getNumericValue(Expr expr)
+        {
+            outs() << "Getting numeric value of " << *expr << "\n";
+            expr = simplifyArithm(expr, false, false);
+            outs() << "Simplified expression: " << *expr << "\n";
+            std::cout << "Operator Type: " << typeid(expr->op()).name() << std::endl;
+            if (isOpX<MPZ>(expr))
+            {
+                outs() << "hi from mpz\n";
+                mpz_class val = getTerm<mpz_class>(expr);
+                return val.get_d();
+            }
+            else if (isOpX<MPQ>(expr))
+            {
+                outs() << "hi from mpq\n";
+                mpq_class val = getTerm<mpq_class>(expr);
+                return val.get_d();
+            }
+
+            else if (isOpX<expr::op::DIV>(expr))
+            {
+                outs() << "hi";
+                Expr num = expr->left();
+                Expr denom = expr->right();
+                outs() << "hi";
+                if (isOpX<MPQ>(num) && isOpX<MPQ>(denom))
+                {
+                    mpq_class x = getTerm<mpq_class>(num);
+                    mpq_class y = getTerm<mpq_class>(denom);
+                    outs() << "hi";
+                    return x.get_d() / y.get_d();
+                }
+                else
+                {
+                    outs() << "How did you get here?\n";
+                    return 0.0;
+                }
+            }
+            else
+            {
+                outs() << "Warning: Expression is not a numeric constant\n";
+                return 0.0;
+            }
+        }
+
+        template <typename Z>
+        double getNumericValue(const std::string &exprString, Z &z3)
+        {
+            // Parse the string into an expression using the temp file method
+            Expr expr = expr_from_string(z3, exprString);
+
+            if (!expr)
+            {
+                outs() << "Warning: Failed to parse expression string\n";
+                return 0.0;
+            }
+
+            // Now extract the numeric value from the expression
+            return getNumericValue(expr);
+        }
+
+        numExpr_t<double> getNumExpr(std::string s)
+        {
+            Expr temp = expr_from_string(m_z3, s);
+            if (!temp)
+            {
+                errs() << "Error: Failed to parse expression string: " << s << "\n";
+                throw std::runtime_error("Failed to parse expression string");
+            }
+            return getNumExpr(temp);
+        }
+
+        numExpr_t<double> getNumExpr(Expr expr)
+        {
+            double d = getNumericValue(expr);
+            numExpr_t<double> x = {d, expr};
+            return x;
+        }
+
+        numExpr_t<double> getNumExpr(double n)
+        {
+            numExpr_t<double> x = {n, mkTerm(mpq_class(std::to_string(n)), m_efac)};
+            return x;
+        }
+
+        /*
+        Expr getBounds(EZ3 &z3, std::string numeric_root, Expr symbolic_root)
+        {
+            std::string test("(and (< 0.0");
+            test += numeric_root;
+            test += ") (< ";
+            test += numeric_root;
+            test += " 1.0))";
+
+            const char *tmpfile = "/tmp/z3_expr_temp.smt2";
+
+            std::ofstream outfile(tmpfile);
+            if (!outfile.is_open())
+            {
+                errs() << "Failed to create temp file\n";
+                return Expr();
+            }
+
+            outfile << "(set-logic QF_LIRA)\n";
+            outfile << "(declare-const _x Bool)\n";
+            outfile << "(assert (= _x " << numeric_root << "))\n";
+            outfile << "(check-sat)\n";
+            outfile.close();
+            Expr result = z3_from_smtlib_file(m_z3, tmpfile);
+            std::remove(tmpfile);
+
+            ZSolver<EZ3> solver(m_z3);
+            solver.assertExpr(result);
+            boost::tribool result = solver.solve();
+        }
+        */
     };
 
     void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, int debug)
     {
         ExprFactory m_efac;
         EZ3 z3(m_efac);
-
         SMTUtils u(m_efac);
-
         CHCs ruleManager(m_efac, z3, debug - 2);
         auto res = ruleManager.parse(smt, doElim, doArithm);
-        // std::string s("(div 10 2)");
-        // Expr test = z3_from_smtlib(z3, s);
-        // outs() << "Test expression: " << test << "\n";
-
         RndLearnerV5 ds(m_efac, z3, ruleManager, to, debug);
 
         for (int i = 0; i < ruleManager.cycles.size(); i++)
@@ -1455,10 +1606,7 @@ namespace ufo
                 continue;
             ds.initializeDecl2(dcl);
         }
-
         ds.categorizeCHCs2();
-
-        ruleManager.print(true);
         int i = 0; // invariant number we want to look at
         // TODO:
         // There's actually a non-zero probability that I don't need to add the update
@@ -1470,47 +1618,28 @@ namespace ufo
         /* TODO:
             Use boost algorithm instead of this home-written function
          */
-        // std::system(ds.getCallToPolar(i).c_str());
         std::string output_test = exec(ds.getCallToPolar(i).c_str());
-        outs() << output_test << "\n";
-        // outs() << ds.getCallToPolar(i) << "\n";
-        /*if (debug > 3)
-        {
-            outs() << "Results for \"python version\": " << output_test << "\n";
-        }*/
-
-        // std::vector<std::string> lines;
-        // boost::algorithm::split(lines, output_test, is_cntrl());
         /* TODO:
             Implement dReal and have it be able to check whether the property holds.
             For the time being, create a built-in max for how many times this algorithm
             can iterate.
         */
 
-        // Include new variables in the CHC systems using the information in lines.
-        // tools that may be useful:
-        //      regex_match
         nlohmann::json closedformJson = nlohmann::json::parse(output_test);
-        if (debug >= 0)
-        {
-            outs() << "Here is the closed form data:" << "\n";
-            outs() << closedformJson.dump(4) << "\n";
-        }
 
         // insert all data into the CHC system and create the first part of the invariant
         // with the bounds
-        outs() << "About to add Index...\n";
         Expr index = ds.addIndex(i);
-        outs() << "Added Index\n";
-        outs() << "About to add symbolic roots...\n";
+        Expr oneReal = mkTerm(mpq_class("1"), m_efac);
+        Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
+
         std::map<std::string, Expr> rootMap = ds.insertRoots(i, closedformJson, z3);
-        outs() << "Added symbolic roots\n";
         ExprSet initialClauses;
+        initialClauses.insert(mk<GEQ>(index, zeroReal));
         // each variable that has a closed form
         for (auto &[name, v] : closedformJson.items())
         {
-            outs() << "Variable" << v.dump(4) << "\n";
-            // get variable using the name of the variable stored in v
+            //  get variable using the name of the variable stored in v
             auto is_equal = [&](Expr var)
             {
                 return boost::algorithm::to_lower_copy(ds.getVarName(var)) == name;
@@ -1522,19 +1651,14 @@ namespace ufo
             Expr var;
             if (itr == ds.invarVarsShort[i].end())
             {
-                outs() << "Variable " << name << " not found in invariant variables.\n";
                 continue; // Skip to the next variable if not found
             }
             else
             {
                 var = *itr;
             }
-
-            outs() << "Found variable " << *var << "\n";
-
-            // each closed form for each variable
             size_t idx = 0;
-            for (auto itr = v.begin(); itr != v.end(); ++itr)
+            for (auto itr = v.begin(); itr != v.end() && idx < 1; ++itr)
             {
                 Expr cond;
                 Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
@@ -1544,9 +1668,8 @@ namespace ufo
                 }
                 else
                 {
-                    cond = mk<EQ>(index, curr_idx);
+                    cond = mk<AND>(mk<GEQ>(index, curr_idx), mk<LT>(index, mk<PLUS>(curr_idx, oneReal)));
                 }
-                outs() << "Condition: " << *cond << "\n";
 
                 size_t jdx = 0;
                 Expr sum;
@@ -1554,43 +1677,82 @@ namespace ufo
                      base_itr != v[idx]["bases"].end(), coeff_itr != v[idx]["coeffs"].end(); ++base_itr,
                           ++coeff_itr)
                 {
-                    outs() << "Base: " << base_itr->dump(4) << "\n";
-                    outs() << "Coeff: " << coeff_itr->dump(4) << "\n";
                     std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
                     std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
-                    Expr t = ds.z3_parse_expression_via_file(z3, c_str);
+                    Expr t = ds.expr_from_string(z3, c_str);
                     Expr c = ds.replaceUniqueVariable(t, index);
                     Expr b = rootMap[b_str];
-                    outs() << *c << " " << *b << "\n";
+                    if (jdx == 0)
+                    {
+                        sum = mk<MULT>(c, b);
+                    }
+                    else
+                    {
+                        sum = mk<PLUS>(sum, mk<MULT>(c, b));
+                    }
                     jdx++;
                 }
-
-                // for (size_t jdx = 0; jdx < v[idx]["coeffs"].size(); jdx++)
-                //{
-                //  The closed form for a constant
-                /*
-                if (v[idx]["coeffs"].size() == 1 && v[idx]["bases"].size() == 0)
-                {
-                    if (v[idx]["coeffs"][0].is_string())
-                    {
-                        Expr constant = ds.z3_parse_expression_via_file(z3, v[idx]["coeffs"][0].get<std::string>());
-                        Expr closed = mk<EQ>(var, constant);
-                        initialClauses.insert(closed);
-                    }
-                    else if (v[idx]["coeffs"][0].is_number())
-                    {
-                        Expr constant = mkTerm(mpq_class(v[idx]["coeffs"][0].get<std::string>()), m_efac);
-                        Expr closed = mk<EQ>(var, constant);
-                        initialClauses.insert(closed);
-                    }
-                }
-                */
-                //}
-                outs() << "Finished adding formulas to clauses.\n";
+                Expr temp = mk<IMPL>(cond, mk<EQ>(var, sum));
+                initialClauses.insert(temp);
                 idx++;
             }
         }
+        Expr firstInv = conjoin(initialClauses, m_efac);
+
+        // Now add the bounds
+        ExprSet bounds;
+        getConj(firstInv, bounds);
+
+        for (auto &[numeric, symbolic] : rootMap)
+        {
+            outs() << numeric << "\n";
+            double temp = ds.getNumericValue(numeric, z3);
+            outs() << temp << "\n";
+            if (0 < temp && temp < 1.0)
+            {
+                bounds.insert(mk<LEQ>(symbolic, oneReal));
+                bounds.insert(mk<GT>(symbolic, zeroReal));
+            }
+            else
+            {
+                bounds.insert(mk<EQ>(symbolic, oneReal));
+            }
+        }
+        firstInv = conjoin(bounds, m_efac);
         ruleManager.print(true);
+        outs() << firstInv << "\n";
+        map<int, ExprVector> annotations;
+        annotations[i].push_back(firstInv);
+        boost::tribool result = ds.checkFact(i, annotations);
+        if (result)
+        {
+            outs() << "It passed as a fact!\n";
+        }
+        else if (!result)
+        {
+            outs() << "It did not pass as a fact\n";
+        }
+
+        result = ds.checkConsecution(i, annotations);
+        if (result)
+        {
+            outs() << "It passed as a consecution!\n";
+        }
+        else if (!result)
+        {
+            outs() << "It did not pass as a consecution\n";
+        }
+
+        result = ds.checkQuery(i, annotations);
+        if (result)
+        {
+            outs() << "It passed the query!\n";
+        }
+        else if (!result)
+        {
+            outs() << "It did not pass the query\n";
+        }
+
         exit(EXIT_SUCCESS);
         for (auto i : ds.invarVarsShort[i])
         {

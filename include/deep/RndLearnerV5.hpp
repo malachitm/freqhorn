@@ -13,6 +13,9 @@
 #include <algorithm> // For std::find
 #include <boost/algorithm/string.hpp>
 #include <nlohmann/json.hpp>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
 using namespace std;
 using namespace boost;
 
@@ -1019,7 +1022,7 @@ namespace ufo
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
             outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
-            Expr myRootUpdate = z3_from_smtlib(z3, rootVal);
+            Expr myRootUpdate = z3_parse_expression_via_file(z3, rootVal);
             outs() << "Root update expression: " << myRootUpdate << "\n";
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
@@ -1043,8 +1046,8 @@ namespace ufo
                     getConj(hr.body, bodyConjuncts); // Get existing conjuncts
 
                     // Create 0 real literal
-                    Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
-                    Expr initConstraint = mk<EQ>(zeroReal, myRealRootPrime);
+                    Expr oneReal = mkTerm(mpq_class("1.0"), m_efac);
+                    Expr initConstraint = mk<EQ>(oneReal, myRealRootPrime);
                     bodyConjuncts.insert(initConstraint);
 
                     hr.body = conjoin(bodyConjuncts, m_efac); //
@@ -1327,6 +1330,81 @@ namespace ufo
                 ruleManager.invVars[rel].push_back(v);
             }
         }
+
+        /*
+        std::unordered_map<std::string, Expr> extractEqualityMap(const ExprVector &assertions)
+        {
+            std::unordered_map<std::string, Expr> varMap;
+
+            for (const Expr &assertion : assertions)
+            {
+                if (isOpX<EQ>(assertion))
+                {
+                    Expr lhs = assertion->left();
+                    Expr rhs = assertion->right();
+
+                    // LHS = RHS case
+                    if (bind::IsConst()(lhs))
+                    {
+                        std::string varName = bind::fname(lhs)->name();
+                        varMap[varName] = rhs;
+                        outs() << "Mapped: " << varName << " -> " << *rhs << "\n";
+                    }
+                    // RHS = LHS case
+                    else if (bind::IsConst()(rhs))
+                    {
+                        std::string varName = bind::fname(rhs)->name();
+                        varMap[varName] = lhs;
+                        outs() << "Mapped: " << varName << " -> " << *lhs << "\n";
+                    }
+                }
+            }
+
+            return varMap;
+        }
+        */
+        template <typename Z>
+        Expr z3_parse_expression_via_file(Z &z3, const std::string &exprString)
+        {
+            const char *tmpfile = "/tmp/z3_expr_temp.smt2";
+
+            std::ofstream outfile(tmpfile);
+            if (!outfile.is_open())
+            {
+                errs() << "Failed to create temp file\n";
+                return Expr();
+            }
+
+            outfile << "(set-logic QF_LIRA)\n";
+            outfile << "(declare-const _x Real)\n";
+            outfile << "(assert (= _x " << exprString << "))\n";
+            outfile << "(check-sat)\n";
+            outfile.close();
+
+            // Parse the file
+            Expr result = z3_from_smtlib_file(z3, tmpfile);
+            std::remove(tmpfile);
+
+            // Extract just the expression from the equality
+            // result should be: (and (= _x (/ 10 5)))
+            // We want: (/ 10 5)
+
+            if (isOpX<EQ>(result))
+            {
+                // Single equality, return RHS (the actual expression)
+                return result->right();
+            }
+            else if (isOpX<AND>(result))
+            {
+                // AND of equalities, get first conjunct
+                Expr eq = result->left();
+                if (isOpX<EQ>(eq))
+                    return eq->right();
+            }
+
+            outs() << "Warning: Unexpected result structure\n";
+            return result;
+        }
     };
 
     void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, int debug)
@@ -1402,13 +1480,13 @@ namespace ufo
         outs() << "Added symbolic roots\n";
         ExprSet initialClauses;
         // each variable that has a closed form
-        for (auto v : closedformJson)
+        for (auto &[name, v] : closedformJson.items())
         {
             outs() << "Variable" << v.dump(4) << "\n";
             // get variable using the name of the variable stored in v
             auto is_equal = [&](Expr var)
             {
-                return ds.getVarName(var) == v.get<std::string>();
+                return ds.getVarName(var) == name;
             };
             auto itr = std::find_if(
                 ds.invarVarsShort[i].begin(),
@@ -1417,7 +1495,7 @@ namespace ufo
             Expr var;
             if (itr == ds.invarVarsShort[i].end())
             {
-                outs() << "Variable " << v.get<std::string>() << " not found in invariant variables.\n";
+                outs() << "Variable " << name << " not found in invariant variables.\n";
                 continue; // Skip to the next variable if not found
             }
             else

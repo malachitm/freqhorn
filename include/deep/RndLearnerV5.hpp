@@ -926,7 +926,7 @@ namespace ufo
                 exprs.insert(disjoin(negged, m_efac));
             }
 
-            if (u.isSat(exprs))
+            if (u.isSat(exprs) && this->printLog >= 3)
             {
                 std::cout << "Formula is SAT. Model:\n";
 
@@ -1274,7 +1274,7 @@ namespace ufo
                 // --- Modify the Query Rule ---
                 if (hr.isQuery)
                 {
-                    if (printLog >= 3)
+                    if (this->printLog >= 3)
                         outs() << "Adding " << myRealCounter << " to source variables of query rule: " << hr.srcRelation << "\n";
                     // Add to source variables (inputs to the query condition)
                     hr.srcVars.push_back(myRealCounter);
@@ -1333,13 +1333,11 @@ namespace ufo
             size_t rootCount = 0;
             for (const auto &v : closedformJson)
             {
-                outs() << "Processing variable: " << v.dump(4) << "\n";
                 if (!v.is_array())
                     continue;
 
                 for (const auto &item : v)
                 {
-                    outs() << "Processing item: " << item.dump(4) << "\n";
                     if (!item.contains("bases") || !item["bases"].is_array())
                         continue;
 
@@ -1347,15 +1345,13 @@ namespace ufo
                     {
 
                         std::string baseStr = base.get<std::string>();
-                        outs() << "About to check if " << baseStr << " is in the map yet...\n";
                         if (!rootMap.count(baseStr))
                         {
-                            outs() << "It wasn't! Inserting root " << baseStr << " into map\n";
                             rootMap[baseStr] = addRoot(i, baseStr, rootCount++, z3);
                         }
-                        else
+                        else if (this->printLog >= 3)
                         {
-                            outs() << "It was already in the map, skipping insertion for root " << baseStr << "\n";
+                            outs() << baseStr << " was already in the map\n";
                         }
                     }
                 }
@@ -1405,39 +1401,6 @@ namespace ufo
             return replaceAll(expr, replacements);
         }
 
-        /*
-        std::unordered_map<std::string, Expr> extractEqualityMap(const ExprVector &assertions)
-        {
-            std::unordered_map<std::string, Expr> varMap;
-
-            for (const Expr &assertion : assertions)
-            {
-                if (isOpX<EQ>(assertion))
-                {
-                    Expr lhs = assertion->left();
-                    Expr rhs = assertion->right();
-
-                    // LHS = RHS case
-                    if (bind::IsConst()(lhs))
-                    {
-                        std::string varName = bind::fname(lhs)->name();
-                        varMap[varName] = rhs;
-                        outs() << "Mapped: " << varName << " -> " << *rhs << "\n";
-                    }
-                    // RHS = LHS case
-                    else if (bind::IsConst()(rhs))
-                    {
-                        std::string varName = bind::fname(rhs)->name();
-                        varMap[varName] = lhs;
-                        outs() << "Mapped: " << varName << " -> " << *lhs << "\n";
-                    }
-                }
-            }
-
-            return varMap;
-        }
-        */
-
         // Only works for expressions that are either numeric
         // constants or include "_i_0"
         Expr str_to_expr(std::string exprString)
@@ -1479,7 +1442,6 @@ namespace ufo
                     return eq->right();
             }
 
-            outs() << "Warning: Unexpected result structure\n";
             return result;
         }
 
@@ -1490,45 +1452,43 @@ namespace ufo
 
         double expr_to_double(Expr expr)
         {
-            outs() << "Getting numeric value of " << *expr << "\n";
             expr = simplifyArithm(expr, false, false);
-            outs() << "Simplified expression: " << *expr << "\n";
-            std::cout << "Operator Type: " << typeid(expr->op()).name() << std::endl;
+            if (this->printLog >= 3)
+            {
+                outs() << "Simplified expression: " << *expr << "\n";
+            }
             if (isOpX<MPZ>(expr))
             {
-                outs() << "hi from mpz\n";
                 mpz_class val = getTerm<mpz_class>(expr);
                 return val.get_d();
             }
             else if (isOpX<MPQ>(expr))
             {
-                outs() << "hi from mpq\n";
                 mpq_class val = getTerm<mpq_class>(expr);
                 return val.get_d();
             }
 
             else if (isOpX<expr::op::DIV>(expr))
             {
-                outs() << "hi";
                 Expr num = expr->left();
                 Expr denom = expr->right();
-                outs() << "hi";
                 if (isOpX<MPQ>(num) && isOpX<MPQ>(denom))
                 {
                     mpq_class x = getTerm<mpq_class>(num);
                     mpq_class y = getTerm<mpq_class>(denom);
-                    outs() << "hi";
                     return x.get_d() / y.get_d();
                 }
                 else
                 {
-                    outs() << "How did you get here?\n";
                     return 0.0;
                 }
             }
             else
             {
-                outs() << "Warning: Expression is not a numeric constant\n";
+                if (this->printLog >= 3)
+                {
+                    outs() << "Warning: Expression is not a numeric constant\n";
+                }
                 return 0.0;
             }
         }
@@ -1549,6 +1509,7 @@ namespace ufo
             return expr_to_double(expr);
         }
 
+        [[deprecated("This isn't used right now, you can ignore this")]]
         numExpr_t<double> getNumExpr(std::string s)
         {
             Expr temp = str_to_expr(s);
@@ -1559,14 +1520,14 @@ namespace ufo
             }
             return getNumExpr(temp);
         }
-
+        [[deprecated("This isn't used right now, you can ignore this")]]
         numExpr_t<double> getNumExpr(Expr expr)
         {
             double d = expr_to_double(expr);
             numExpr_t<double> x = {d, expr};
             return x;
         }
-
+        [[deprecated("This isn't used right now, you can ignore this")]]
         numExpr_t<double> getNumExpr(double n)
         {
             numExpr_t<double> x = {n, mkTerm(mpq_class(std::to_string(n)), m_efac)};
@@ -1621,31 +1582,18 @@ namespace ufo
         {
             assert(i < invNumber);
             Expr dstRelationName = fc[i]->dstRelation;
-            // int srcNum = getVarIndex(fc[i]->srcRelation, decls);
             ExprVector unprimed = ruleManager.invVars[dstRelationName];
             ExprVector primed = ruleManager.invVarsPrime[dstRelationName];
             ExprMap mappings;
             size_t amount = ruleManager.invVars[dstRelationName].size();
-            outs() << "There are " << amount << " variables...\n";
-            outs() << "About to enter loop.\n";
             for (size_t index = 0; index < amount; index++)
             {
-                outs() << "Hello I'm here!";
-                outs() << *primed[index] << " " << *unprimed[index] << "\n";
+                // outs() << "Primed: "*primed[index] << " Unprimed: " << *unprimed[index] << "\n";
                 mappings[primed[index]] = unprimed[index];
             }
-            outs() << "Exited loop :0 \n";
 
-            outs() << fc[i]->body << "\n";
             Expr test = replaceAll(fc[i]->body, mappings);
-            outs() << test << "\n";
             return test;
-            //
-            //  ExprSet exprs;
-            //  getConj(fc[i]->body, exprs);
-            // Expr hello = replaceAll(fc[i]->body, invVarsPr[i], invVars[i]);
-            // outs() << hello << "\n";
-            // return hello;
         }
     };
 
@@ -1799,10 +1747,6 @@ namespace ufo
                 exit(EXIT_SUCCESS);
             }
             ds.learnedExprs[i].insert(firstInv);
-            // ExprSet lemmas;
-            // getConj(ds.learnedExprs[i], lemmas);
-            // lemmas.insert(firstInv);
-            // ds.learnedExprs[i] = conjoin(lemmas, m_efac);
         }
         else
         {

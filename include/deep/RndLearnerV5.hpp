@@ -20,6 +20,10 @@
 #include <string>
 #include <utility>     // for std::pair
 #include <type_traits> // for std::is_arithmetic_v
+#include <sstream>     // Required for std::istringstream
+#include <stdexcept>   // Required for exceptions
+#include <iomanip>     // For output formatting
+#include <boost/range/combine.hpp>
 using namespace std;
 using namespace boost;
 
@@ -101,7 +105,8 @@ namespace ufo
                                                                                                    false, false, 0, 0, false, _debug) {}
         ~RndLearnerV5() {}
         std::vector<ExprSet> learnedExprs; // indexed by invNumber
-
+        map<int, ExprVector> symbolicRoots;
+        map<int, ExprVector> numericRoots;
         void resolveDependencies(
             std::map<expr::Expr, expr::Expr> &definitions,
             const expr::ExprVector &dstVars,
@@ -1054,7 +1059,7 @@ namespace ufo
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
             outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
-            Expr myRootUpdate = expr_from_string(z3, rootVal);
+            Expr myRootUpdate = str_to_expr(rootVal);
             if (isOpX<expr::op::DIV>(myRootUpdate))
             {
                 Expr left = myRootUpdate->left();
@@ -1066,6 +1071,8 @@ namespace ufo
             outs() << "Root update expression: " << myRootUpdate << "\n";
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
+            symbolicRoots[i].push_back(myRealRoot);
+            numericRoots[i].push_back(myRootUpdate);
 
             outs() << "Added symbolic roots\n";
             outs() << "Now adding to rules\n";
@@ -1320,6 +1327,8 @@ namespace ufo
         std::map<std::string, Expr> insertRoots(int i, nlohmann::json &closedformJson, EZ3 &z3)
         {
             assert(i < invNumber);
+            symbolicRoots[i] = ExprVector();
+            numericRoots[i] = ExprVector();
             std::map<std::string, Expr> rootMap;
             size_t rootCount = 0;
             for (const auto &v : closedformJson)
@@ -1428,8 +1437,10 @@ namespace ufo
             return varMap;
         }
         */
-        template <typename Z>
-        Expr expr_from_string(Z &z3, const std::string &exprString)
+
+        // Only works for expressions that are either numeric
+        // constants or include "_i_0"
+        Expr str_to_expr(std::string exprString)
         {
             const char *tmpfile = "/tmp/z3_expr_temp.smt2";
 
@@ -1448,7 +1459,7 @@ namespace ufo
             outfile.close();
 
             // Parse the file
-            Expr result = z3_from_smtlib_file(z3, tmpfile);
+            Expr result = z3_from_smtlib_file(m_z3, tmpfile);
             std::remove(tmpfile);
 
             // Extract just the expression from the equality
@@ -1472,7 +1483,12 @@ namespace ufo
             return result;
         }
 
-        double getNumericValue(Expr expr)
+        Expr double_to_expr(const double &x)
+        {
+            return mkTerm(mpq_class(x), m_efac);
+        }
+
+        double expr_to_double(Expr expr)
         {
             outs() << "Getting numeric value of " << *expr << "\n";
             expr = simplifyArithm(expr, false, false);
@@ -1518,10 +1534,10 @@ namespace ufo
         }
 
         template <typename Z>
-        double getNumericValue(const std::string &exprString, Z &z3)
+        double expr_to_double(const std::string &exprString, Z &z3)
         {
             // Parse the string into an expression using the temp file method
-            Expr expr = expr_from_string(z3, exprString);
+            Expr expr = str_to_expr(exprString);
 
             if (!expr)
             {
@@ -1530,12 +1546,12 @@ namespace ufo
             }
 
             // Now extract the numeric value from the expression
-            return getNumericValue(expr);
+            return expr_to_double(expr);
         }
 
         numExpr_t<double> getNumExpr(std::string s)
         {
-            Expr temp = expr_from_string(m_z3, s);
+            Expr temp = str_to_expr(s);
             if (!temp)
             {
                 errs() << "Error: Failed to parse expression string: " << s << "\n";
@@ -1546,7 +1562,7 @@ namespace ufo
 
         numExpr_t<double> getNumExpr(Expr expr)
         {
-            double d = getNumericValue(expr);
+            double d = expr_to_double(expr);
             numExpr_t<double> x = {d, expr};
             return x;
         }
@@ -1588,6 +1604,49 @@ namespace ufo
             boost::tribool result = solver.solve();
         }
         */
+        void conversion_testing()
+        {
+            outs() << "Testing functions to see if data type conversion works properly\n";
+            std::string s = "(/ 9.0 10.0)";
+            outs() << s << "\n";
+            Expr t = str_to_expr(s);
+            outs() << t << "\n";
+            double d = expr_to_double(t);
+            outs() << std::to_string(d) << "\n";
+            Expr t2 = double_to_expr(d);
+            outs() << t2 << "\n";
+        }
+
+        Expr getInitBody(int i)
+        {
+            assert(i < invNumber);
+            Expr dstRelationName = fc[i]->dstRelation;
+            // int srcNum = getVarIndex(fc[i]->srcRelation, decls);
+            ExprVector unprimed = ruleManager.invVars[dstRelationName];
+            ExprVector primed = ruleManager.invVarsPrime[dstRelationName];
+            ExprMap mappings;
+            size_t amount = ruleManager.invVars[dstRelationName].size();
+            outs() << "There are " << amount << " variables...\n";
+            outs() << "About to enter loop.\n";
+            for (size_t index = 0; index < amount; index++)
+            {
+                outs() << "Hello I'm here!";
+                outs() << *primed[index] << " " << *unprimed[index] << "\n";
+                mappings[primed[index]] = unprimed[index];
+            }
+            outs() << "Exited loop :0 \n";
+
+            outs() << fc[i]->body << "\n";
+            Expr test = replaceAll(fc[i]->body, mappings);
+            outs() << test << "\n";
+            return test;
+            //
+            //  ExprSet exprs;
+            //  getConj(fc[i]->body, exprs);
+            // Expr hello = replaceAll(fc[i]->body, invVarsPr[i], invVars[i]);
+            // outs() << hello << "\n";
+            // return hello;
+        }
     };
 
     void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, int debug)
@@ -1658,7 +1717,7 @@ namespace ufo
                 var = *itr;
             }
             size_t idx = 0;
-            for (auto itr = v.begin(); itr != v.end() && idx < 1; ++itr)
+            for (auto itr = v.begin(); itr != v.end(); ++itr)
             {
                 Expr cond;
                 Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
@@ -1679,7 +1738,7 @@ namespace ufo
                 {
                     std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
                     std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
-                    Expr t = ds.expr_from_string(z3, c_str);
+                    Expr t = ds.str_to_expr(c_str);
                     Expr c = ds.replaceUniqueVariable(t, index);
                     Expr b = rootMap[b_str];
                     if (jdx == 0)
@@ -1706,7 +1765,7 @@ namespace ufo
         for (auto &[numeric, symbolic] : rootMap)
         {
             outs() << numeric << "\n";
-            double temp = ds.getNumericValue(numeric, z3);
+            double temp = ds.expr_to_double(numeric, z3);
             outs() << temp << "\n";
             if (0 < temp && temp < 1.0)
             {
@@ -1718,74 +1777,108 @@ namespace ufo
                 bounds.insert(mk<EQ>(symbolic, oneReal));
             }
         }
+        // 0 <= _i_0 < 1 -> Init()
+        Expr init = ds.getInitBody(i);
+        Expr conds = mk<AND>(mk<LEQ>(zeroReal, index), mk<LT>(index, oneReal));
+        bounds.insert(mk<IMPL>(conds, init));
         firstInv = conjoin(bounds, m_efac);
         ruleManager.print(true);
         outs() << firstInv << "\n";
+
         map<int, ExprVector> annotations;
         annotations[i].push_back(firstInv);
         boost::tribool result = ds.checkFact(i, annotations);
-        if (result)
+        if (ds.checkFact(i, annotations) && ds.checkConsecution(i, annotations))
         {
-            outs() << "It passed as a fact!\n";
-        }
-        else if (!result)
-        {
-            outs() << "It did not pass as a fact\n";
-        }
-
-        result = ds.checkConsecution(i, annotations);
-        if (result)
-        {
-            outs() << "It passed as a consecution!\n";
-        }
-        else if (!result)
-        {
-            outs() << "It did not pass as a consecution\n";
-        }
-
-        result = ds.checkQuery(i, annotations);
-        if (result)
-        {
-            outs() << "It passed the query!\n";
-        }
-        else if (!result)
-        {
-            outs() << "It did not pass the query\n";
-        }
-
-        exit(EXIT_SUCCESS);
-        for (auto i : ds.invarVarsShort[i])
-        {
-            outs() << "Invar Vars Short: " << i << "\n";
-        }
-        // Inv = x=2i /\ y=i /\ (x,y,i)>=0
-        Expr realZero = mkTerm(mpq_class("0"), m_efac);
-        Expr realTwo = mkTerm(mpq_class("2"), m_efac);
-        ExprSet clauses;
-        Expr clause1 = mk<EQ>(ds.invarVarsShort[i][0], mk<MULT>(ds.invarVarsShort[i][2], realTwo));
-        clauses.insert(clause1);
-        Expr clause2 = mk<EQ>(ds.invarVarsShort[i][1], ds.invarVarsShort[i][2]);
-        clauses.insert(clause2);
-        Expr clause3 = mk<GEQ>(ds.invarVarsShort[i][0], realZero);
-        clauses.insert(clause3);
-        Expr clause4 = mk<GEQ>(ds.invarVarsShort[i][1], realZero);
-        clauses.insert(clause4);
-        Expr clause5 = mk<GEQ>(ds.invarVarsShort[i][2], realZero);
-        clauses.insert(clause5);
-        Expr inv = conjoin(clauses, m_efac);
-        if (ds.checkAllCHCs(i, inv))
-        {
-            outs() << "Candidate invariant " << *inv << " satisfies all CHCs for predicate " << ds.decls[i] << "\n";
+            if (ds.checkQuery(i, annotations))
+            {
+                // you can reformat this later
+                outs() << "Found safety invariant before estimation!\n";
+                ds.learnedExprs[i].insert(firstInv);
+                outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                exit(EXIT_SUCCESS);
+            }
+            ds.learnedExprs[i].insert(firstInv);
+            // ExprSet lemmas;
+            // getConj(ds.learnedExprs[i], lemmas);
+            // lemmas.insert(firstInv);
+            // ds.learnedExprs[i] = conjoin(lemmas, m_efac);
         }
         else
         {
-            outs() << "Candidate invariant " << *inv << " does not satisfy all CHCs for predicate " << ds.decls[i] << "\n";
-        }
-        for (auto &hr : ds.ruleManager.invVars[ds.decls[i]])
-        {
-            outs() << "Var: " << hr << "\n";
+            outs() << "The test didn't pass initiation and consection? Goodness me...\n";
+            exit(EXIT_FAILURE);
         }
 
+        /**
+         * Main analysis loop:
+         * 1) Go through list of roots and add a clause showing how the value has been
+         * decreased with an increased index
+         * 2) If it does not pass consecution, increment the estimation by an epsilon
+         * 3) after this is done, see if it passes safety.
+         */
+
+        uint64_t max_iterations = 10000;
+        double epsilon = 1e-7;
+        ExprSet lemmas;
+        ExprMap previousBound; // maps variable to it's valuation last iteration
+        for (auto v : ds.symbolicRoots[i])
+        {
+            previousBound[v] = oneReal;
+        }
+        for (size_t j = 1; j < max_iterations; j++)
+        {
+            // Assumes we only have roots 0<r<1 and r=1
+            for (const auto &tuple : boost::combine(ds.numericRoots[i], ds.symbolicRoots[i]))
+            {
+                Expr n, s;
+                boost::tie(n, s) = tuple;
+                // Case 1: r=1
+
+                double val = ds.expr_to_double(n);
+                if (val == ds.expr_to_double(oneReal))
+                {
+                    continue; // Note: maybe I can just do n == oneReal?
+                }
+
+                // Case 2: 0<r<1
+                Expr newBound = simplifyArithm(mk<MULT>(previousBound[s], n));
+                if (debug >= 3)
+                {
+                    outs() << "New bound for " << s << ": " << newBound << "\n";
+                }
+                Expr cond = mk<GEQ>(index, ds.double_to_expr(j));
+                Expr bnd = mk<LEQ>(s, newBound);
+                Expr newLemma = mk<IMPL>(cond, bnd);
+                annotations[i][0] = newLemma;
+                while (!(ds.checkFact(i, annotations) && ds.checkConsecution(i, annotations)))
+                {
+                    double widenedBound = ds.expr_to_double(newBound) + epsilon;
+                    newBound = ds.double_to_expr(widenedBound);
+                    bnd = mk<LEQ>(s, newBound);
+                    newLemma = mk<IMPL>(cond, bnd);
+                    annotations[i][0] = newLemma;
+                }
+                // If safety is also met, there's nothing more to do!
+                if (ds.checkQuery(i, annotations))
+                {
+                    outs() << "Invariant found by index " << j << "\n";
+                    ds.learnedExprs[i].insert(newLemma);
+                    outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                    exit(EXIT_SUCCESS);
+                }
+
+                // Add lemma to the learned expressions
+                ds.learnedExprs[i].insert(newLemma);
+                // getConj(ds.learnedExprs[i], lemmas);
+                // lemmas.insert(firstInv);
+                // ds.learnedExprs[i] = conjoin(lemmas, m_efac);
+
+                previousBound[s] = newBound;
+            }
+        }
+
+        outs() << "Analysis inconclusive after " << max_iterations << " iterations.\n";
         exit(EXIT_SUCCESS);
     }
 }

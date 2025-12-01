@@ -53,7 +53,7 @@ namespace z3
     }
   };
 
-  struct ast_ptr_equal_to : public std::binary_function<ast, ast, bool>
+  struct ast_ptr_equal_to
   {
     bool operator()(const ast &a1, const ast &a2) const
     {

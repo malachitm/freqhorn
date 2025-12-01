@@ -2636,7 +2636,7 @@ namespace expr
           return isOpX<SELECT>(e);
         }
       };
-      class IsStore : public std::unary_function<Expr, bool>
+      class IsStore
       {
       public:
         bool operator()(Expr e)
@@ -2937,7 +2937,7 @@ namespace expr
   {
     /* Visitors are hidden. Only to be used internally. */
 
-    struct RAV : public std::unary_function<Expr, VisitAction>
+    struct RAV
     {
       Expr s;
       Expr t;
@@ -2950,7 +2950,7 @@ namespace expr
       }
     };
 
-    struct RAVALL : public std::unary_function<Expr, VisitAction>
+    struct RAVALL
     {
       ExprVector *s;
       ExprVector *t;
@@ -2968,7 +2968,7 @@ namespace expr
       }
     };
 
-    struct RAVALLM : public std::unary_function<Expr, VisitAction>
+    struct RAVALLM
     {
       ExprMap *m;
 
@@ -2982,7 +2982,7 @@ namespace expr
       }
     };
 
-    struct RAVALLMR : public std::unary_function<Expr, VisitAction>
+    struct RAVALLMR
     {
       ExprMap *m;
 
@@ -2999,7 +2999,7 @@ namespace expr
       }
     };
 
-    struct RAVSIMP : public std::unary_function<Expr, VisitAction>
+    struct RAVSIMP
     {
       Expr s;
       Expr t;
@@ -3018,7 +3018,7 @@ namespace expr
     };
 
     template <typename F, typename OutputIterator>
-    struct FV : public std::unary_function<Expr, VisitAction>
+    struct FV
     {
       F filter;
 
@@ -3049,7 +3049,7 @@ namespace expr
     };
 
     template <typename M>
-    struct RV : public std::unary_function<Expr, VisitAction>
+    struct RV
     {
       typedef typename M::const_iterator const_iterator;
 
@@ -3064,7 +3064,7 @@ namespace expr
     };
 
     template <typename M>
-    struct RVSIMP : public std::unary_function<Expr, VisitAction>
+    struct RVSIMP
     {
       typedef typename M::const_iterator const_iterator;
 
@@ -3091,7 +3091,7 @@ namespace expr
       }
     };
 
-    struct CV : public std::unary_function<Expr, VisitAction>
+    struct CV
     {
       Expr e;
       bool found;
@@ -3119,7 +3119,7 @@ namespace expr
     };
 
     template <typename T>
-    struct ContainsOp : public std::unary_function<Expr, VisitAction>
+    struct ContainsOp
     {
       bool found;
 
@@ -3136,7 +3136,7 @@ namespace expr
       }
     };
 
-    struct HasUninterp : public std::unary_function<Expr, VisitAction>
+    struct HasUninterp
     {
       bool found;
 
@@ -3161,7 +3161,7 @@ namespace expr
       }
     };
 
-    struct SIZE : public std::unary_function<Expr, VisitAction>
+    struct SIZE
     {
       size_t count;
 
@@ -3175,7 +3175,7 @@ namespace expr
     };
 
     template <typename T>
-    struct RW : public std::unary_function<Expr, VisitAction>
+    struct RW
     {
       std::shared_ptr<T> _r;
 
@@ -3624,7 +3624,7 @@ namespace expr
 namespace boost
 {
   template <>
-  struct hash<expr::Expr> : public std::unary_function<expr::Expr, std::size_t>
+  struct hash<expr::Expr>
   {
     std::size_t operator()(const expr::Expr &v) const
     {
@@ -3637,7 +3637,7 @@ namespace boost
 namespace std
 {
   template <>
-  struct hash<expr::Expr> : public std::unary_function<expr::Expr, std::size_t>
+  struct hash<expr::Expr>
   {
     std::size_t operator()(const expr::Expr &v) const
     {
@@ -3671,7 +3671,7 @@ namespace expr
     };
 
     template <typename Abs>
-    struct ABSCST : public std::unary_function<Expr, VisitAction>
+    struct ABSCST
     {
       Abs &m_a;
       unsigned m_offset;
@@ -3773,7 +3773,7 @@ namespace expr
     };
 
     template <typename Sub>
-    struct SUBBND : public std::unary_function<Expr, VisitAction>
+    struct SUBBND
     {
       Sub &m_a;
       unsigned m_offset;

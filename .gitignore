@@ -12,7 +12,7 @@
 /llvm-seahorn/
 /seahorn-llvm/
 /gtags.files
-
+pwa-horn-benchmarks/benchmark_generator/*.smt2
 .mypy_cache
 .vscode
 .sync

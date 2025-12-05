@@ -926,9 +926,9 @@ namespace ufo
                 exprs.insert(disjoin(negged, m_efac));
             }
 
-            if (u.isSat(exprs) && this->printLog >= 3)
+            if (u.isSat(exprs) && printLog >= 5)
             {
-                std::cout << "Formula is SAT. Model:\n";
+                std::cout << "Formula is SAT. Model: \n";
 
                 // Retrieve model as an expression tree of equalities
                 Expr modelExpr = u.getModel();
@@ -939,22 +939,36 @@ namespace ufo
                     u.print(modelExpr, std::cout);
                     std::cout << std::endl;
                 }
+
+                outs() << "Expressions" << conjoin(exprs, m_efac) << "\n";
             }
             return u.isSat(exprs);
         }
 
         boost::tribool checkFact(int i, map<int, ExprVector> &annotations)
         {
+            if (printLog >= 6)
+            {
+                outs() << "Checking fact...\n";
+            }
             return !checkCHC2(*fc[i], annotations, true);
         }
 
         boost::tribool checkConsecution(int i, map<int, ExprVector> &annotations)
         {
+            if (printLog >= 6)
+            {
+                outs() << "Checking consecution...\n";
+            }
             return !checkCHC2(*tr[i], annotations, true);
         }
 
         boost::tribool checkQuery(int i, map<int, ExprVector> &annotations)
         {
+            if (printLog >= 6)
+            {
+                outs() << "Checking query...\n";
+            }
             return !checkCHC2(*qr[i], annotations, true);
         }
 
@@ -1452,7 +1466,8 @@ namespace ufo
 
         double expr_to_double(Expr expr)
         {
-            expr = simplifyArithm(expr, false, false);
+            // expr = simplifyArithm(expr, false, false);
+            outs() << "1...\n";
             if (this->printLog >= 3)
             {
                 outs() << "Simplified expression: " << *expr << "\n";
@@ -1472,14 +1487,17 @@ namespace ufo
             {
                 Expr num = expr->left();
                 Expr denom = expr->right();
+                outs() << "2...\n";
                 if (isOpX<MPQ>(num) && isOpX<MPQ>(denom))
                 {
+                    outs() << "3...\n";
                     mpq_class x = getTerm<mpq_class>(num);
                     mpq_class y = getTerm<mpq_class>(denom);
                     return x.get_d() / y.get_d();
                 }
                 else
                 {
+                    outs() << "???\n";
                     return 0.0;
                 }
             }
@@ -1620,7 +1638,11 @@ namespace ufo
         // for the index inside of the query. Just as a heads up.
 
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
-        ruleManager.print(true);
+        if (debug >= 3)
+        {
+            ruleManager.print(true);
+        }
+
         ds.generatePolarFile2(ruleManager, "out.prob");
         /* TODO:
             Use boost algorithm instead of this home-written function
@@ -1730,7 +1752,11 @@ namespace ufo
         Expr conds = mk<AND>(mk<LEQ>(zeroReal, index), mk<LT>(index, oneReal));
         bounds.insert(mk<IMPL>(conds, init));
         firstInv = conjoin(bounds, m_efac);
-        ruleManager.print(true);
+        if (debug >= 3)
+        {
+            ruleManager.print(true);
+        }
+
         outs() << firstInv << "\n";
 
         map<int, ExprVector> annotations;
@@ -1750,7 +1776,7 @@ namespace ufo
         }
         else
         {
-            outs() << "The test didn't pass initiation and consection? Goodness me...\n";
+            outs() << "The test didn't pass initiation and consection for index=0...\n";
             exit(EXIT_FAILURE);
         }
 
@@ -1765,10 +1791,10 @@ namespace ufo
         uint64_t max_iterations = 10000;
         double epsilon = 1e-7;
         ExprSet lemmas;
-        ExprMap previousBound; // maps variable to it's valuation last iteration
+        ExprMap previousUpper; // maps variable to it's valuation last iteration
         for (auto v : ds.symbolicRoots[i])
         {
-            previousBound[v] = oneReal;
+            previousUpper[v] = oneReal;
         }
         for (size_t j = 1; j < max_iterations; j++)
         {
@@ -1786,7 +1812,7 @@ namespace ufo
                 }
 
                 // Case 2: 0<r<1
-                Expr newBound = simplifyArithm(mk<MULT>(previousBound[s], n));
+                Expr newBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
                 if (debug >= 3)
                 {
                     outs() << "New bound for " << s << ": " << newBound << "\n";
@@ -1818,7 +1844,7 @@ namespace ufo
                 // lemmas.insert(firstInv);
                 // ds.learnedExprs[i] = conjoin(lemmas, m_efac);
 
-                previousBound[s] = newBound;
+                previousUpper[s] = newBound;
             }
         }
 

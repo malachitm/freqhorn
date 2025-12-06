@@ -3123,7 +3123,7 @@ namespace expr
     {
       bool found;
 
-      ContainsOp<T>() : found(false) {}
+      ContainsOp() : found(false) {}
 
       VisitAction operator()(Expr exp)
       {

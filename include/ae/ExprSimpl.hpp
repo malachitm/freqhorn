@@ -1147,7 +1147,8 @@ namespace ufo
 
   inline static Expr simplifyMod(Expr e)
   {
-    if (isOpX<MOD>(e) && isOpX<MPZ>(e->right()))
+    // Checks to ensure no division by 0
+    if (isOpX<MOD>(e) && isOpX<MPZ>(e->right()) && lexical_cast<cpp_int>(e->right()) != 0)
     {
       cpp_int coef = 1;
       cpp_int divider = lexical_cast<cpp_int>(e->right());
@@ -1936,7 +1937,7 @@ namespace ufo
           toRepeat = true;
         }
       }
-      free(eq);
+      delete eq;
     }
     res = simplifyBool(res);
     if (toRepeat)

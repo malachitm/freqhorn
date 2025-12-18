@@ -215,6 +215,8 @@ namespace ufo
         auto candsTmp = candidates;
         Expr newCand = getForallCnj(eliminateQuantifiers(
             mk<AND>(candToProp, constraint), varsRenameFrom, invNum, false));
+        if (newCand == NULL)
+          return true;
         newCand = actualizeQV(invNum, newCand);
         if (newCand == NULL)
           return true;
@@ -662,6 +664,10 @@ namespace ufo
       {
         // next cand (to be sampled)
         // TODO: find a smarter way to calculate; make parametrizable
+        if (ruleManager.cycles.size() == 0)
+        {
+          return false;
+        }
         int cycleNum = i % ruleManager.cycles.size();
         int tmp = ruleManager.cycles[cycleNum][0];
         Expr rel = ruleManager.chcs[tmp].srcRelation;
@@ -1183,8 +1189,8 @@ namespace ufo
             for (auto b : substs)
             {
               cpp_int i2 = lexical_cast<cpp_int>(b.first);
-
-              if (i1 % i2 == 0 && i1 / i2 != 0)
+              // first conditional to ensure no division by zero
+              if (i2 != 0 && i1 % i2 == 0 && i1 / i2 != 0)
                 for (auto c : b.second)
                 {
                   Expr e = simplifyArithm(normalize(mk<EQ>(a->left(), mk<MULT>(mkMPZ(i1 / i2, m_efac), c))));

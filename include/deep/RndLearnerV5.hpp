@@ -1791,10 +1791,12 @@ namespace ufo
         uint64_t max_iterations = 10000;
         double epsilon = 1e-7;
         ExprSet lemmas;
-        ExprMap previousUpper; // maps variable to it's valuation last iteration
+        ExprMap previousUpper; // maps variable to it's upper last iteration
+        ExprMap previousLower; // maps variable to it's lower last iteration
         for (auto v : ds.symbolicRoots[i])
         {
             previousUpper[v] = oneReal;
+            previousLower[v] = zeroReal;
         }
         for (size_t j = 1; j < max_iterations; j++)
         {
@@ -1804,7 +1806,6 @@ namespace ufo
                 Expr n, s;
                 boost::tie(n, s) = tuple;
                 // Case 1: r=1
-
                 double val = ds.expr_to_double(n);
                 if (val == ds.expr_to_double(oneReal))
                 {
@@ -1812,6 +1813,7 @@ namespace ufo
                 }
 
                 // Case 2: 0<r<1
+
                 Expr newBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
                 if (debug >= 3)
                 {
@@ -1829,6 +1831,7 @@ namespace ufo
                     newLemma = mk<IMPL>(cond, bnd);
                     annotations[i][0] = newLemma;
                 }
+
                 // If safety is also met, there's nothing more to do!
                 if (ds.checkQuery(i, annotations))
                 {
@@ -1840,11 +1843,35 @@ namespace ufo
 
                 // Add lemma to the learned expressions
                 ds.learnedExprs[i].insert(newLemma);
-                // getConj(ds.learnedExprs[i], lemmas);
-                // lemmas.insert(firstInv);
-                // ds.learnedExprs[i] = conjoin(lemmas, m_efac);
-
                 previousUpper[s] = newBound;
+
+                newBound = simplifyArithm(mk<MULT>(previousLower[s], n));
+                cond = mk<LEQ>(index, ds.double_to_expr(j));
+                bnd = mk<GEQ>(s, newBound);
+                newLemma = mk<IMPL>(cond, bnd);
+                annotations[i][0] = newLemma;
+
+                while (!(ds.checkFact(i, annotations) && ds.checkConsecution(i, annotations)))
+                {
+                    double widenedBound = ds.expr_to_double(newBound) - epsilon;
+                    newBound = ds.double_to_expr(widenedBound);
+                    bnd = mk<GEQ>(s, newBound);
+                    newLemma = mk<IMPL>(cond, bnd);
+                    annotations[i][0] = newLemma;
+                }
+
+                // If safety is also met, there's nothing more to do!
+                if (ds.checkQuery(i, annotations))
+                {
+                    outs() << "Invariant found by index " << j << "\n";
+                    ds.learnedExprs[i].insert(newLemma);
+                    outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                    exit(EXIT_SUCCESS);
+                }
+
+                // Add lemma to the learned expressions
+                ds.learnedExprs[i].insert(newLemma);
+                previousLower[s] = newBound;
             }
         }
 

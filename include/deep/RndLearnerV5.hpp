@@ -196,7 +196,10 @@ namespace ufo
         // Helper function to convert an Expr to its POLAR string representation
         std::string exprToPolarString(const Expr &e, const std::map<std::string, std::string> &varRenames = {})
         {
-            std::cout << "Converting expresion to POLAR string: " << *e << std::endl;
+            if (printLog >= 3)
+            {
+                std::cout << "Converting expresion to POLAR string: " << *e << std::endl;
+            }
             if (!e)
                 return "null_expr";
 
@@ -660,7 +663,10 @@ namespace ufo
                         break;
                     }
                 }
-                std::cout << "Corresponding dstVar: " << (correspondingDstVar ? getVarName(correspondingDstVar) : "not found") << std::endl;
+                if (printLog >= 5)
+                {
+                    std::cout << "Corresponding dstVar: " << (correspondingDstVar ? getVarName(correspondingDstVar) : "not found") << std::endl;
+                }
 
                 if (dstVarDefinitions.count(correspondingDstVar))
                 {
@@ -735,11 +741,15 @@ namespace ufo
             {
                 outFile << polarProgram.str();
                 outFile.close();
-                std::cout << "Successfully wrote POLAR program to " << outputFilename << std::endl;
+                if (printLog >= 5)
+                {
+                    std::cout << "Successfully wrote POLAR program to " << outputFilename << std::endl;
+                }
             }
             else
             {
                 std::cerr << "Error: Unable to open file " << outputFilename << " for writing." << std::endl;
+                exit(EXIT_FAILURE);
             }
         }
 
@@ -1064,7 +1074,7 @@ namespace ufo
                 Support roots that are complex, this assumes all roots are real due
                 to how it writes the update
             */
-            outs() << "Adding root " << rootVal << " to invariant #" << i << "\n";
+            // outs() << "Adding root " << rootVal << " to invariant #" << i << "\n";
             assert(i < invNumber);
             // --- Define the counter variable ---
             std::string rootBaseName = "_r_" + std::to_string(rootCount);
@@ -1072,24 +1082,24 @@ namespace ufo
             Expr rootNamePrimedExpr = mkTerm<string>(rootBaseName + "'", m_efac);
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
-            outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
+            // outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
             Expr myRootUpdate = str_to_expr(rootVal);
             if (isOpX<expr::op::DIV>(myRootUpdate))
             {
                 Expr left = myRootUpdate->left();
                 Expr right = myRootUpdate->right();
-                outs() << "Root Type: " << typeid(myRootUpdate->op()).name() << "\n";
-                outs() << "Numerator Type: " << typeid(left->op()).name() << "\n";
-                outs() << "Denominator Type: " << typeid(right->op()).name() << "\n";
+                // outs() << "Root Type: " << typeid(myRootUpdate->op()).name() << "\n";
+                // outs() << "Numerator Type: " << typeid(left->op()).name() << "\n";
+                // outs() << "Denominator Type: " << typeid(right->op()).name() << "\n";
             }
-            outs() << "Root update expression: " << myRootUpdate << "\n";
+            // outs() << "Root update expression: " << myRootUpdate << "\n";
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
             symbolicRoots[i].push_back(myRealRoot);
             numericRoots[i].push_back(myRootUpdate);
 
-            outs() << "Added symbolic roots\n";
-            outs() << "Now adding to rules\n";
+            // outs() << "Added symbolic roots\n";
+            // outs() << "Now adding to rules\n";
             for (auto &hr : ruleManager.chcs)
             {
                 // --- Modify the Fact ---
@@ -1125,7 +1135,7 @@ namespace ufo
                         ruleManager.invVarsPrime[relationName].push_back(myRealRootPrime);
                         ruleManager.addDeclAndVars(relationName, updatedQueryDstUnprimedVars);
                     }
-                    outs() << "Updated ruleManager for relation: " << relationName << "\n";
+                    // outs() << "Updated ruleManager for relation: " << relationName << "\n";
                 }
 
                 // --- Modify the Transition Rule ---
@@ -1397,13 +1407,20 @@ namespace ufo
 
             if (vars.empty())
             {
-                outs() << "Warning: No variables found in expression\n";
+                if (printLog >= 5)
+                {
+                    outs() << "Warning: No variables found in expression\n";
+                }
+
                 return expr;
             }
 
             if (vars.size() > 1)
             {
-                outs() << "Warning: Expression has multiple variables, replacing all\n";
+                if (printLog >= 5)
+                {
+                    outs() << "Warning: Expression has multiple variables, replacing all\n";
+                }
             }
 
             ExprMap replacements;
@@ -1467,7 +1484,6 @@ namespace ufo
         double expr_to_double(Expr expr)
         {
             // expr = simplifyArithm(expr, false, false);
-            outs() << "1...\n";
             if (this->printLog >= 3)
             {
                 outs() << "Simplified expression: " << *expr << "\n";
@@ -1487,17 +1503,14 @@ namespace ufo
             {
                 Expr num = expr->left();
                 Expr denom = expr->right();
-                outs() << "2...\n";
                 if (isOpX<MPQ>(num) && isOpX<MPQ>(denom))
                 {
-                    outs() << "3...\n";
                     mpq_class x = getTerm<mpq_class>(num);
                     mpq_class y = getTerm<mpq_class>(denom);
                     return x.get_d() / y.get_d();
                 }
                 else
                 {
-                    outs() << "???\n";
                     return 0.0;
                 }
             }
@@ -1734,9 +1747,7 @@ namespace ufo
 
         for (auto &[numeric, symbolic] : rootMap)
         {
-            outs() << numeric << "\n";
             double temp = ds.expr_to_double(numeric, z3);
-            outs() << temp << "\n";
             if (0 < temp && temp < 1.0)
             {
                 bounds.insert(mk<LEQ>(symbolic, oneReal));
@@ -1755,9 +1766,8 @@ namespace ufo
         if (debug >= 3)
         {
             ruleManager.print(true);
+            outs() << firstInv << "\n";
         }
-
-        outs() << firstInv << "\n";
 
         map<int, ExprVector> annotations;
         annotations[i].push_back(firstInv);
@@ -1767,9 +1777,17 @@ namespace ufo
             if (ds.checkQuery(i, annotations))
             {
                 // you can reformat this later
-                outs() << "Found safety invariant before estimation!\n";
-                ds.learnedExprs[i].insert(firstInv);
-                outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                if (debug >= 2)
+                {
+                    outs() << "Found safety invariant before estimation!\n";
+                    ds.learnedExprs[i].insert(firstInv);
+                    outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                }
+                else
+                {
+                    outs() << "Success!\n";
+                }
+
                 exit(EXIT_SUCCESS);
             }
             ds.learnedExprs[i].insert(firstInv);
@@ -1835,9 +1853,17 @@ namespace ufo
                 // If safety is also met, there's nothing more to do!
                 if (ds.checkQuery(i, annotations))
                 {
-                    outs() << "Invariant found by index " << j << "\n";
-                    ds.learnedExprs[i].insert(newLemma);
-                    outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                    if (debug >= 2)
+                    {
+                        outs() << "Invariant found by index " << j << "\n";
+                        ds.learnedExprs[i].insert(newLemma);
+                        outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                    }
+                    else
+                    {
+                        outs() << "Success!\n";
+                    }
+
                     exit(EXIT_SUCCESS);
                 }
 
@@ -1845,6 +1871,7 @@ namespace ufo
                 ds.learnedExprs[i].insert(newLemma);
                 previousUpper[s] = newBound;
 
+                /*
                 newBound = simplifyArithm(mk<MULT>(previousLower[s], n));
                 cond = mk<LEQ>(index, ds.double_to_expr(j));
                 bnd = mk<GEQ>(s, newBound);
@@ -1872,6 +1899,7 @@ namespace ufo
                 // Add lemma to the learned expressions
                 ds.learnedExprs[i].insert(newLemma);
                 previousLower[s] = newBound;
+                */
             }
         }
 

@@ -1721,7 +1721,15 @@ namespace ufo
                 {
                     std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
                     std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
+                    if(debug >= 5){
+                        outs() << "c_str: " << c_str << "\n";
+                        outs() << "b_str: " << b_str << "\n";
+                    }
+                    
                     Expr t = ds.str_to_expr(c_str);
+                    if(debug >= 5){
+                        outs() << "new expression: " << t << "\n";
+                    }
                     Expr c = ds.replaceUniqueVariable(t, index);
                     Expr b = rootMap[b_str];
                     if (jdx == 0)

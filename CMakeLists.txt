@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set (FreqHorn_VERSION_MAJOR 0)
 set (FreqHorn_VERSION_MINOR 5)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 if (NOT PACKAGE_VERSION)
   set(PACKAGE_VERSION
     "${FreqHorn_VERSION_MAJOR}.${FreqHorn_VERSION_MINOR}.${FreqHorn_VERSION_PATCH}")
@@ -160,6 +164,9 @@ add_definitions(-Wno-redeclared-class-member -Wno-sometimes-uninitialized)
 add_definitions(-Wno-covered-switch-default)
 add_definitions(-Wno-inconsistent-missing-override)
 set(CMAKE_CXX_STANDARD 17)
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   add_definitions( -Wno-unused-local-typedefs)
 endif ()

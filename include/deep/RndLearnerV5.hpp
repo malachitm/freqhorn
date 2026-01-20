@@ -10,6 +10,7 @@
 #include <sstream>
 #include <vector>
 #include <map>
+#include <optional>
 #include <algorithm> // For std::find
 #include <boost/algorithm/string.hpp>
 #include <nlohmann/json.hpp>
@@ -24,24 +25,12 @@
 #include <stdexcept>   // Required for exceptions
 #include <iomanip>     // For output formatting
 #include <boost/range/combine.hpp>
-using namespace std;
-using namespace boost;
-
-// --- Hypothetical C++ Code Snippet ---
-
-// Helper function to get the string name of a variable from an Expr
-// Assuming varExpr is an FAPP of an FDECL, and the FDECL's name is a STRING
-
-// --- End of Hypothetical C++ Code Snippet ---
-
-// Source - https://stackoverflow.com/a/478960
-// Posted by waqas, modified by community. See post 'Timeline' for change history
-// Retrieved 2025-11-19, License - CC BY-SA 4.0
-
 #include <iostream>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
+using namespace std;
+using namespace boost;
 
 std::string exec(const char *cmd)
 {
@@ -89,11 +78,9 @@ namespace ufo
         vector<HornRuleExt *> tr;
         vector<HornRuleExt *> fc;
         vector<HornRuleExt *> qr;
-
         map<int, ExprVector> invVars;
         map<int, ExprVector> invVarsPr;
         map<int, int> invVarsSz;
-
         map<int, ExprVector> auxVars;
         map<int, ExprVector> auxVarsPr;
         map<int, int> auxVarsSz;
@@ -104,9 +91,132 @@ namespace ufo
         RndLearnerV5(ExprFactory &_e, EZ3 &_z3, CHCs &_r, unsigned _to, int _debug) : RndLearnerV4(_e, _z3, _r, _to, false, false, 0, 0, false, 0, false, false,
                                                                                                    false, false, 0, 0, false, _debug) {}
         ~RndLearnerV5() {}
+        map<int, Expr> indices;
+
+        Expr oneReal = mkTerm(mpq_class("1"), m_efac);
+        Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
         std::vector<ExprSet> learnedExprs; // indexed by invNumber
         map<int, ExprVector> symbolicRoots;
         map<int, ExprVector> numericRoots;
+        map<int, std::map<std::string, Expr>> rootMaps;
+
+        Expr generateInitCond(int i)
+        {
+            Expr init = getInitBody(i);
+            Expr conds = mk<AND>(mk<LEQ>(zeroReal, indices[i]), mk<LT>(indices[i], oneReal));
+            return mk<IMPL>(conds, init);
+        }
+
+        /**
+         *
+         */
+        std::optional<Expr> generateRootBounds(int i)
+        {
+            assert(i < invNumber);
+            if (!rootMaps.count(i))
+            {
+                return {};
+            }
+            ExprSet bounds;
+            for (auto &[numeric, symbolic] : rootMaps[i])
+            {
+                double temp = expr_to_double(numeric, m_z3);
+                if (0 < temp && temp < 1.0)
+                {
+                    bounds.insert(mk<LEQ>(symbolic, oneReal));
+                    bounds.insert(mk<GT>(symbolic, zeroReal));
+                }
+                else
+                {
+                    bounds.insert(mk<EQ>(symbolic, oneReal));
+                }
+            }
+            return conjoin(bounds, m_efac);
+        }
+
+        Expr generateSymbolicClosedForms(int i, nlohmann::json closedformJson)
+        {
+            indices[i] = addIndex(i);
+            Expr index = indices[i];
+            std::map<std::string, Expr> rootMap = insertRoots(i, closedformJson, m_z3);
+            ExprSet initialClauses;
+            initialClauses.insert(mk<GEQ>(index, zeroReal));
+            // each variable that has a closed form
+            for (auto &[name, v] : closedformJson.items())
+            {
+                //  get variable using the name of the variable stored in v
+                auto is_equal = [&](Expr var)
+                {
+                    return boost::algorithm::to_lower_copy(getVarName(var)) == name;
+                };
+                auto itr = std::find_if(
+                    invarVarsShort[i].begin(),
+                    invarVarsShort[i].end(),
+                    is_equal);
+                Expr var;
+                if (itr == invarVarsShort[i].end())
+                {
+                    continue; // Skip to the next variable if not found
+                }
+                else
+                {
+                    var = *itr;
+                }
+                size_t idx = 0;
+                for (auto itr = v.begin(); itr != v.end(); ++itr)
+                {
+                    Expr cond;
+                    Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
+                    if (std::next(itr) == v.end())
+                    {
+                        cond = mk<GEQ>(index, curr_idx);
+                    }
+                    else
+                    {
+                        cond = mk<AND>(mk<GEQ>(index, curr_idx), mk<LT>(index, mk<PLUS>(curr_idx, oneReal)));
+                    }
+
+                    size_t jdx = 0;
+                    Expr sum;
+                    for (auto base_itr = v[idx]["bases"].begin(), coeff_itr = v[idx]["coeffs"].begin();
+                         base_itr != v[idx]["bases"].end(), coeff_itr != v[idx]["coeffs"].end(); ++base_itr,
+                              ++coeff_itr)
+                    {
+                        std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
+                        std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
+                        if (printLog >= 5)
+                        {
+                            outs() << "c_str: " << c_str << "\n";
+                            outs() << "b_str: " << b_str << "\n";
+                        }
+
+                        Expr t = str_to_expr(c_str);
+                        if (printLog >= 5)
+                        {
+                            outs() << "new expression: " << t << "\n";
+                        }
+                        Expr c = replaceUniqueVariable(t, index);
+                        Expr b = rootMap[b_str];
+                        if (jdx == 0)
+                        {
+                            sum = mk<MULT>(c, b);
+                        }
+                        else
+                        {
+                            sum = mk<PLUS>(sum, mk<MULT>(c, b));
+                        }
+                        jdx++;
+                    }
+                    Expr temp = mk<IMPL>(cond, mk<EQ>(var, sum));
+                    initialClauses.insert(temp);
+                    idx++;
+                }
+            }
+
+            rootMaps[i] = rootMap;
+            return conjoin(initialClauses, m_efac);
+        }
+
         void resolveDependencies(
             std::map<expr::Expr, expr::Expr> &definitions,
             const expr::ExprVector &dstVars,
@@ -1646,9 +1756,12 @@ namespace ufo
         }
         ds.categorizeCHCs2();
         int i = 0; // invariant number we want to look at
-        // TODO:
-        // There's actually a non-zero probability that I don't need to add the update
-        // for the index inside of the query. Just as a heads up.
+
+        /**
+         * TODO: There's actually a non-zero probability that I don't
+         * need to add the update for the index of the safety, just
+         * as a heads up.
+         */
 
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
         if (debug >= 3)
@@ -1657,126 +1770,61 @@ namespace ufo
         }
 
         ds.generatePolarFile2(ruleManager, "out.prob");
-        /* TODO:
-            Use boost algorithm instead of this home-written function
+        /**
+         * TODO: Use boost algorithm instead of this home-written
+         * function
          */
         std::string output_test = exec(ds.getCallToPolar(i).c_str());
-        /* TODO:
-            Implement dReal and have it be able to check whether the property holds.
-            For the time being, create a built-in max for how many times this algorithm
-            can iterate.
-        */
-
         nlohmann::json closedformJson = nlohmann::json::parse(output_test);
 
-        // insert all data into the CHC system and create the first part of the invariant
-        // with the bounds
-        Expr index = ds.addIndex(i);
+        /**
+         * Get the initial symbolic closed form as a conjunction
+         */
+        Expr symbolicClosedForms = ds.generateSymbolicClosedForms(i, closedformJson);
+        Expr index = ds.indices[i];
         Expr oneReal = mkTerm(mpq_class("1"), m_efac);
         Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
-
-        std::map<std::string, Expr> rootMap = ds.insertRoots(i, closedformJson, z3);
-        ExprSet initialClauses;
-        initialClauses.insert(mk<GEQ>(index, zeroReal));
-        // each variable that has a closed form
-        for (auto &[name, v] : closedformJson.items())
+        if (debug >= 5)
         {
-            //  get variable using the name of the variable stored in v
-            auto is_equal = [&](Expr var)
-            {
-                return boost::algorithm::to_lower_copy(ds.getVarName(var)) == name;
-            };
-            auto itr = std::find_if(
-                ds.invarVarsShort[i].begin(),
-                ds.invarVarsShort[i].end(),
-                is_equal);
-            Expr var;
-            if (itr == ds.invarVarsShort[i].end())
-            {
-                continue; // Skip to the next variable if not found
-            }
-            else
-            {
-                var = *itr;
-            }
-            size_t idx = 0;
-            for (auto itr = v.begin(); itr != v.end(); ++itr)
-            {
-                Expr cond;
-                Expr curr_idx = mkTerm(mpq_class(std::to_string(idx)), m_efac);
-                if (std::next(itr) == v.end())
-                {
-                    cond = mk<GEQ>(index, curr_idx);
-                }
-                else
-                {
-                    cond = mk<AND>(mk<GEQ>(index, curr_idx), mk<LT>(index, mk<PLUS>(curr_idx, oneReal)));
-                }
-
-                size_t jdx = 0;
-                Expr sum;
-                for (auto base_itr = v[idx]["bases"].begin(), coeff_itr = v[idx]["coeffs"].begin();
-                     base_itr != v[idx]["bases"].end(), coeff_itr != v[idx]["coeffs"].end(); ++base_itr,
-                          ++coeff_itr)
-                {
-                    std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
-                    std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
-                    if(debug >= 5){
-                        outs() << "c_str: " << c_str << "\n";
-                        outs() << "b_str: " << b_str << "\n";
-                    }
-                    
-                    Expr t = ds.str_to_expr(c_str);
-                    if(debug >= 5){
-                        outs() << "new expression: " << t << "\n";
-                    }
-                    Expr c = ds.replaceUniqueVariable(t, index);
-                    Expr b = rootMap[b_str];
-                    if (jdx == 0)
-                    {
-                        sum = mk<MULT>(c, b);
-                    }
-                    else
-                    {
-                        sum = mk<PLUS>(sum, mk<MULT>(c, b));
-                    }
-                    jdx++;
-                }
-                Expr temp = mk<IMPL>(cond, mk<EQ>(var, sum));
-                initialClauses.insert(temp);
-                idx++;
-            }
+            pprint(symbolicClosedForms);
         }
-        Expr firstInv = conjoin(initialClauses, m_efac);
 
-        // Now add the bounds
-        ExprSet bounds;
-        getConj(firstInv, bounds);
-
-        for (auto &[numeric, symbolic] : rootMap)
+        /**
+         * Get the root bounds as a conjunction
+         */
+        auto rootBoundsRes = ds.generateRootBounds(i);
+        Expr rootBounds;
+        if (!rootBoundsRes && debug >= 5)
         {
-            double temp = ds.expr_to_double(numeric, z3);
-            if (0 < temp && temp < 1.0)
-            {
-                bounds.insert(mk<LEQ>(symbolic, oneReal));
-                bounds.insert(mk<GT>(symbolic, zeroReal));
-            }
-            else
-            {
-                bounds.insert(mk<EQ>(symbolic, oneReal));
-            }
+            outs() << "For some reason the program tried to generate root bounds for roots that don't exist\n";
+            outs() << "The request was ignored...\n";
+            rootBounds = mk<TRUE>(m_efac);
         }
-        // 0 <= _i_0 < 1 -> Init()
-        Expr init = ds.getInitBody(i);
-        Expr conds = mk<AND>(mk<LEQ>(zeroReal, index), mk<LT>(index, oneReal));
-        bounds.insert(mk<IMPL>(conds, init));
-        firstInv = conjoin(bounds, m_efac);
+        else
+        {
+            rootBounds = rootBoundsRes.value();
+        }
+
+        /**
+         * Get the lemma (0<=i<1) -> Init(V)
+         */
+        Expr initialCondition = ds.generateInitCond(i);
+        ExprSet lemmasSet;
+        getConj(symbolicClosedForms, lemmasSet);
+        getConj(rootBounds, lemmasSet);
+        getConj(initialCondition, lemmasSet);
+        Expr firstInv = conjoin(lemmasSet, m_efac);
         if (debug >= 3)
         {
             ruleManager.print(true);
             outs() << firstInv << "\n";
         }
 
+        /**
+         * Check first to see if it passes initiation and consecution.
+         * - If so, check safety. And if that works, you're done.
+         * - If not, exit out of confusion.
+         */
         map<int, ExprVector> annotations;
         annotations[i].push_back(firstInv);
         boost::tribool result = ds.checkFact(i, annotations);
@@ -1787,9 +1835,9 @@ namespace ufo
                 // you can reformat this later
                 if (debug >= 2)
                 {
-                    outs() << "Found safety invariant before estimation!\n";
+                    outs() << "Success! Invariant found by n=0\n";
                     ds.learnedExprs[i].insert(firstInv);
-                    outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                    pprint(conjoin(ds.learnedExprs[i], m_efac));
                 }
                 else
                 {
@@ -1800,11 +1848,33 @@ namespace ufo
             }
             ds.learnedExprs[i].insert(firstInv);
         }
+
         else
         {
-            outs() << "The test didn't pass initiation and consection for index=0...\n";
-            exit(EXIT_FAILURE);
+            // It is unclear why a system would not pass initiation
+            // and consecution at this step, so exit if this happens.
+            if (debug >= 5)
+            {
+                outs() << "initial invariant did not pass initiation and consecution...\n";
+            }
+            outs() << "unknown\n";
+
+            return;
         }
+
+        /**
+         * TODO: Here you should enter the algorithm for computing
+         * the maximum N based on the closed forms. Use an optional type
+         * in case there is no solution / the system cannot compute an N.
+         */
+
+        /**
+         * TODO: This is where to place a call to a function that generates
+         * a new thread to run the dReal reachability algorithm.
+         * Make sure to not use the same Z3 context, you will have to make
+         * it from scratch. You may be able to make a deep copy of things,
+         * but make sure to double check.
+         */
 
         /**
          * Main analysis loop:

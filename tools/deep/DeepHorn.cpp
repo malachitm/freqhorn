@@ -60,7 +60,7 @@ int main(int argc, char **argv)
   const char *OPT_V2 = "--v2";
   const char *OPT_V3 = "--v3";
   const char *OPT_V4 = "--v4";
-  const char *OPT_V5 = "--v5";
+  const char *OPT_V5 = "--phaserr";
   const char *OPT_MAX_ATTEMPTS = "--attempts";
   const char *OPT_TO = "--to";
   const char *OPT_K_IND = "--kind";

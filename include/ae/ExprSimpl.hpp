@@ -276,6 +276,12 @@ namespace ufo
     return isOpX<REAL_TY>(t);
   }
 
+  /// True for integer OR real sorted expressions (i.e. any arithmetic sort).
+  inline static bool isArithm(Expr a)
+  {
+    return isNumeric(a) || isReal(a);
+  }
+
   inline static bool isArray(Expr a)
   {
     Expr t = typeOf(a);
@@ -293,6 +299,78 @@ namespace ufo
   {
     return isOpX<MPZ>(e) || isOpX<MPQ>(e);
   }
+
+  /// True for any expression that represents a concrete rational constant:
+  /// MPZ, MPQ, or DIV(numericConst, numericConst)  (real division of literals).
+  /// Z3 parses decimal literals like 0.9 as DIV(9, 10).
+  inline static bool isRatConst(Expr e)
+  {
+    if (isOpX<MPZ>(e) || isOpX<MPQ>(e))
+      return true;
+    if (isOpX<DIV>(e) && e->arity() == 2)
+      return isRatConst(e->left()) && isRatConst(e->right());
+    return false;
+  }
+
+  /// Helper: convert an MPZ, MPQ, or DIV(const,const) Expr to mpq_class.
+  inline static mpq_class exprToQ(Expr e)
+  {
+    if (isOpX<MPZ>(e))
+      return mpq_class(lexical_cast<string>(e));
+    if (isOpX<MPQ>(e))
+      return getTerm<mpq_class>(e);
+    if (isOpX<DIV>(e) && e->arity() == 2)
+    {
+      mpq_class num = exprToQ(e->left());
+      mpq_class den = exprToQ(e->right());
+      if (den != 0)
+      {
+        mpq_class r = num / den;
+        r.canonicalize();
+        return r;
+      }
+    }
+    // fallback
+    return mpq_class(lexical_cast<string>(e));
+  }
+
+  /// Helper: create an Expr from mpq_class (MPZ if denominator is 1).
+  inline static Expr qToExpr(mpq_class v, ExprFactory &efac)
+  {
+    v.canonicalize();
+    if (v.get_den() == 1)
+      return mkMPZ(lexical_cast<cpp_int>(v.get_num().get_str()), efac);
+    return mkTerm(v, efac);
+  }
+
+  /// Check whether \p e is a symbolic square-root constant, i.e. a real
+  /// constant whose name matches /^sqrt[0-9]+$/.
+  inline static bool isSqrtConst(Expr e)
+  {
+    if (!isRealConst(e))
+      return false;
+    Expr nameExpr = fname(e)->left(); // FDECL -> first child is STRING(name)
+    if (!isOpX<STRING>(nameExpr))
+      return false;
+    const std::string &name = getTerm<std::string>(nameExpr);
+    if (name.size() <= 4 || name.substr(0, 4) != "sqrt")
+      return false;
+    for (size_t i = 4; i < name.size(); ++i)
+      if (!std::isdigit(static_cast<unsigned char>(name[i])))
+        return false;
+    return true;
+  }
+
+  /// Extract the radicand N from a sqrtN constant (assumes isSqrtConst).
+  inline static cpp_int getSqrtVal(Expr e)
+  {
+    const std::string &name =
+        getTerm<std::string>(fname(e)->left());
+    return cpp_int(name.substr(4));
+  }
+
+  // Forward declaration — defined after simplifyPlus / simplifyMult.
+  static Expr simplifySqrtExpr(Expr e);
 
   inline static unsigned containsNum(Expr a, Expr b)
   {
@@ -369,9 +447,13 @@ namespace ufo
         getMultOps(a->arg(i), ops);
       }
     }
-    else if (isOpX<UN_MINUS>(a) && isNumeric(a->left()))
+    else if (isOpX<UN_MINUS>(a) && isArithm(a->left()))
     {
-      ops.push_back(mkMPZ((-1), a->getFactory()));
+      // Use MPQ(-1) when the operand is real-sorted, MPZ(-1) otherwise
+      if (isReal(a->left()))
+        ops.push_back(mkTerm(mpq_class(-1), a->getFactory()));
+      else
+        ops.push_back(mkMPZ((-1), a->getFactory()));
       ops.push_back(a->left());
     }
     else
@@ -545,6 +627,12 @@ namespace ufo
         string inv_val = to_string(-val1) + "/" + to_string(val2);
         return mkTerm(mpq_class(inv_val), e->getFactory());
       }
+    }
+    else if (isOpX<DIV>(e) && isRatConst(e))
+    {
+      mpq_class v = exprToQ(e);
+      v = -v;
+      return qToExpr(v, e->getFactory());
     }
     else if (isOpX<ITE>(e))
     {
@@ -1039,6 +1127,23 @@ namespace ufo
     return (a > b);
   }
 
+  /// Rational-aware version of evaluateCmpConsts for real-sorted expressions.
+  inline static bool evaluateCmpConstsQ(Expr fla, mpq_class a, mpq_class b)
+  {
+    if (isOpX<EQ>(fla))
+      return (a == b);
+    if (isOpX<NEQ>(fla))
+      return (a != b);
+    if (isOpX<LEQ>(fla))
+      return (a <= b);
+    if (isOpX<GEQ>(fla))
+      return (a >= b);
+    if (isOpX<LT>(fla))
+      return (a < b);
+    assert(isOpX<GT>(fla));
+    return (a > b);
+  }
+
   inline static Expr mkNeg(Expr fla)
   {
     if (isOpX<NEG>(fla))
@@ -1102,16 +1207,64 @@ namespace ufo
     return c;
   }
 
+  /// Rational-aware version: extracts and sums all rational constants
+  /// (MPZ, MPQ, or DIV(const,const)).
+  /// Sets \p hasRat to true if any non-integer constant was found.
+  inline static mpq_class separateConstQ(ExprVector &plsOps, bool &hasRat)
+  {
+    mpq_class c = 0;
+    hasRat = false;
+    for (auto it = plsOps.begin(); it != plsOps.end();)
+    {
+      if (isRatConst(*it))
+      {
+        c += exprToQ(*it);
+        if (!isOpX<MPZ>(*it))
+          hasRat = true;
+        it = plsOps.erase(it);
+      }
+      else
+        ++it;
+    }
+    c.canonicalize();
+    return c;
+  }
+
   inline static Expr simplifyPlus(Expr exp)
   {
     ExprVector plsOps;
     getAddTerm(exp, plsOps);
-    cpp_int c = separateConst(plsOps);
-    std::sort(plsOps.begin(), plsOps.end(), [](Expr &x, Expr &y)
-              { return x < y; });
-    // GF: to write some kind of a fold-operator that counts the numbers of occurences
-    if (c != 0)
-      plsOps.push_back(mkMPZ(c, exp->getFactory()));
+
+    // Check if any operand is a non-integer rational constant
+    bool hasRat = false;
+    for (auto &op : plsOps)
+      if (isRatConst(op) && !isOpX<MPZ>(op))
+      {
+        hasRat = true;
+        break;
+      }
+
+    if (hasRat)
+    {
+      mpq_class c = separateConstQ(plsOps, hasRat);
+      std::sort(plsOps.begin(), plsOps.end(), [](Expr &x, Expr &y)
+                { return x < y; });
+      if (c != 0)
+      {
+        if (c.get_den() == 1)
+          plsOps.push_back(mkMPZ(lexical_cast<cpp_int>(c.get_num().get_str()), exp->getFactory()));
+        else
+          plsOps.push_back(mkTerm(c, exp->getFactory()));
+      }
+    }
+    else
+    {
+      cpp_int c = separateConst(plsOps);
+      std::sort(plsOps.begin(), plsOps.end(), [](Expr &x, Expr &y)
+                { return x < y; });
+      if (c != 0)
+        plsOps.push_back(mkMPZ(c, exp->getFactory()));
+    }
     return mkplus(plsOps, exp->getFactory());
   }
 
@@ -1119,28 +1272,68 @@ namespace ufo
   {
     if (isOpX<MULT>(e))
     {
-      cpp_int coef = 1;
       ExprVector ops;
       getMultOps(e, ops);
 
-      ExprVector rem;
-      for (auto a : ops)
+      // Detect whether any operand is a rational constant
+      // (MPQ terminal or DIV(MPZ,MPZ) from Z3 decimal parsing)
+      bool hasRat = false;
+      for (auto &a : ops)
+        if (isRatConst(a) && !isOpX<MPZ>(a))
+        {
+          hasRat = true;
+          break;
+        }
+
+      if (hasRat)
       {
-        if (isOpX<MPZ>(a))
-          coef *= lexical_cast<cpp_int>(a);
-        else
-          rem.push_back(a);
+        // Rational-aware path: accumulate coefficient as mpq_class
+        mpq_class coef = 1;
+        ExprVector rem;
+        for (auto &a : ops)
+        {
+          if (isRatConst(a))
+            coef *= exprToQ(a);
+          else
+            rem.push_back(a);
+        }
+        coef.canonicalize();
+
+        // Build the numeric coefficient expression
+        Expr num = qToExpr(coef, e->getFactory());
+
+        if (rem.empty() || coef == 0)
+          return num;
+
+        Expr remTerm = mkmult(rem, e->getFactory());
+        if (coef == 1)
+          return remTerm;
+
+        return mk<MULT>(num, remTerm);
       }
+      else
+      {
+        // Integer-only path (original behavior)
+        cpp_int coef = 1;
+        ExprVector rem;
+        for (auto &a : ops)
+        {
+          if (isOpX<MPZ>(a))
+            coef *= lexical_cast<cpp_int>(a);
+          else
+            rem.push_back(a);
+        }
 
-      Expr num = mkMPZ(coef, e->getFactory());
-      if (rem.empty() || coef == 0)
-        return num;
+        Expr num = mkMPZ(coef, e->getFactory());
+        if (rem.empty() || coef == 0)
+          return num;
 
-      Expr remTerm = mkmult(rem, e->getFactory());
-      if (coef == 1)
-        return remTerm;
+        Expr remTerm = mkmult(rem, e->getFactory());
+        if (coef == 1)
+          return remTerm;
 
-      return mk<MULT>(num, remTerm);
+        return mk<MULT>(num, remTerm);
+      }
     }
     return e;
   }
@@ -1221,7 +1414,7 @@ namespace ufo
     Expr b1;
     Expr b2;
     bool added = false;
-    if (isNumeric(exp->right()))
+    if (isArithm(exp->right()))
     {
       getAddTerm(exp->right(), plusOpsLeft);
       getAddTerm(exp->last(), plusOpsRight);
@@ -1286,9 +1479,23 @@ namespace ufo
     getAddTerm(exp->left(), plusOpsLeft);
     getAddTerm(exp->right(), plusOpsRight);
 
-    cpp_int constLeft = separateConst(plusOpsLeft);
-    cpp_int constRight = separateConst(plusOpsRight);
+    // Detect if any operand is a non-integer rational constant
+    bool hasRat = false;
+    for (auto &op : plusOpsLeft)
+      if (isRatConst(op) && !isOpX<MPZ>(op))
+      {
+        hasRat = true;
+        break;
+      }
+    if (!hasRat)
+      for (auto &op : plusOpsRight)
+        if (isRatConst(op) && !isOpX<MPZ>(op))
+        {
+          hasRat = true;
+          break;
+        }
 
+    // Cancel common terms between left and right
     for (auto it1 = plusOpsLeft.begin(); it1 != plusOpsLeft.end();)
     {
       bool found = false;
@@ -1311,66 +1518,124 @@ namespace ufo
         ++it1;
     }
 
-    // processing of constLeft/Right to prepare for further simplifyArithmDisjunctions/Conjunctions
-    if (constLeft != 0 || constRight != 0)
+    if (hasRat)
     {
-      if (plusOpsLeft.size() == 0)
+      // Rational-aware path
+      bool dummyRat;
+      mpq_class constLeft = separateConstQ(plusOpsLeft, dummyRat);
+      mpq_class constRight = separateConstQ(plusOpsRight, dummyRat);
+
+      if (constLeft != 0 || constRight != 0)
       {
-        constLeft = constLeft - constRight;
-        constRight = 0;
+        if (plusOpsLeft.size() == 0)
+        {
+          constLeft = constLeft - constRight;
+          constRight = 0;
+        }
+        else
+        {
+          constRight = constRight - constLeft;
+          constLeft = 0;
+        }
       }
-      else
+
+      if (constLeft != 0)
+        plusOpsLeft.push_back(qToExpr(constLeft, efac));
+      if (constRight != 0)
+        plusOpsRight.push_back(qToExpr(constRight, efac));
+
+      if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 0)
       {
-        constRight = constRight - constLeft;
-        constLeft = 0;
+        if (isOpX<EQ>(exp) || isOpX<GEQ>(exp) || isOpX<LEQ>(exp))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
+      }
+
+      if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 1 &&
+          isRatConst(*plusOpsRight.begin()))
+      {
+        if (evaluateCmpConstsQ(exp, 0, exprToQ(*plusOpsRight.begin())))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
+      }
+
+      if (plusOpsLeft.size() == 1 && plusOpsRight.size() == 0 &&
+          isRatConst(*plusOpsLeft.begin()))
+      {
+        if (evaluateCmpConstsQ(exp, exprToQ(*plusOpsLeft.begin()), 0))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
       }
     }
-
-    if (constLeft != 0)
-      plusOpsLeft.push_back(mkMPZ(constLeft, efac));
-    if (constRight != 0)
-      plusOpsRight.push_back(mkMPZ(constRight, efac));
-
-    if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 0)
+    else
     {
-      if (isOpX<EQ>(exp) || isOpX<GEQ>(exp) || isOpX<LEQ>(exp))
-        return mk<TRUE>(efac);
-      else
-        return mk<FALSE>(efac);
-    }
+      // Integer-only path (original behavior)
+      cpp_int constLeft = separateConst(plusOpsLeft);
+      cpp_int constRight = separateConst(plusOpsRight);
 
-    if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 1 &&
-        isOpX<MPZ>(*plusOpsRight.begin()))
-    {
-      if (evaluateCmpConsts(exp, 0, lexical_cast<cpp_int>(*plusOpsRight.begin())))
-        return mk<TRUE>(efac);
-      else
-        return mk<FALSE>(efac);
-    }
+      if (constLeft != 0 || constRight != 0)
+      {
+        if (plusOpsLeft.size() == 0)
+        {
+          constLeft = constLeft - constRight;
+          constRight = 0;
+        }
+        else
+        {
+          constRight = constRight - constLeft;
+          constLeft = 0;
+        }
+      }
 
-    if (plusOpsLeft.size() == 1 && plusOpsRight.size() == 0 &&
-        isOpX<MPZ>(*plusOpsLeft.begin()))
-    {
-      if (evaluateCmpConsts(exp, lexical_cast<cpp_int>(*plusOpsLeft.begin()), 0))
-        return mk<TRUE>(efac);
-      else
-        return mk<FALSE>(efac);
+      if (constLeft != 0)
+        plusOpsLeft.push_back(mkMPZ(constLeft, efac));
+      if (constRight != 0)
+        plusOpsRight.push_back(mkMPZ(constRight, efac));
+
+      if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 0)
+      {
+        if (isOpX<EQ>(exp) || isOpX<GEQ>(exp) || isOpX<LEQ>(exp))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
+      }
+
+      if (plusOpsLeft.size() == 0 && plusOpsRight.size() == 1 &&
+          isOpX<MPZ>(*plusOpsRight.begin()))
+      {
+        if (evaluateCmpConsts(exp, 0, lexical_cast<cpp_int>(*plusOpsRight.begin())))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
+      }
+
+      if (plusOpsLeft.size() == 1 && plusOpsRight.size() == 0 &&
+          isOpX<MPZ>(*plusOpsLeft.begin()))
+      {
+        if (evaluateCmpConsts(exp, lexical_cast<cpp_int>(*plusOpsLeft.begin()), 0))
+          return mk<TRUE>(efac);
+        else
+          return mk<FALSE>(efac);
+      }
     }
 
     Expr l = mkplus(plusOpsLeft, efac);
     Expr r = mkplus(plusOpsRight, efac);
 
     // small ITE-optimization; to extend:
-    if (isOpX<EQ>(exp) && isOpX<ITE>(l) && isOpX<MPZ>(r) &&
-        isOpX<MPZ>(l->right()) && isOpX<MPZ>(l->last()) && l->right() != l->last())
+    if (isOpX<EQ>(exp) && isOpX<ITE>(l) && isNumericConst(r) &&
+        isNumericConst(l->right()) && isNumericConst(l->last()) && l->right() != l->last())
     {
       if (l->right() == r)
         return l->left();
       if (l->left() == r)
         return mkNeg(l->left());
     }
-    else if (isOpX<EQ>(exp) && isOpX<ITE>(r) && isOpX<MPZ>(l) &&
-             isOpX<MPZ>(r->right()) && isOpX<MPZ>(r->last()) && r->right() != r->last())
+    else if (isOpX<EQ>(exp) && isOpX<ITE>(r) && isNumericConst(l) &&
+             isNumericConst(r->right()) && isNumericConst(r->last()) && r->right() != r->last())
     {
       if (r->right() == l)
         return r->left();
@@ -1379,6 +1644,273 @@ namespace ufo
     }
 
     return reBuildCmp(exp, l, r);
+  }
+
+  // ── Symbolic square-root simplification ──────────────────────────────
+  //
+  // Expressions may contain uninterpreted real constants named sqrtN
+  // (e.g. sqrt36401) that semantically stand for √N.  The helpers below
+  // reduce algebraic expressions in Q(√N):
+  //   • sqrtN * sqrtN  →  N
+  //   • c₁·sqrtN + c₂·sqrtN  →  (c₁+c₂)·sqrtN
+  //   • (a + b·sqrtN)(c + d·sqrtN) → (ac + bdN) + (ad + bc)·sqrtN
+  //
+  // Every element of Q(√N) is represented as a pair (rat, irr) of
+  // mpq_class values meaning   rat + irr·√N.
+
+  /// Try to decompose \p e into  rat + irr·sqrtN  where \p sqrtE is the
+  /// Expr for the sqrtN constant.  Returns true on success.
+  /// Works for: ratConst, sqrtN, MULT(ratConst, sqrtN), PLUS of those,
+  /// UN_MINUS of those.
+  static bool toSqrtPair(Expr e, Expr sqrtE,
+                         mpq_class &rat, mpq_class &irr)
+  {
+    // --- base cases ---
+    if (e == sqrtE)
+    {
+      rat = 0;
+      irr = 1;
+      return true;
+    }
+    if (isRatConst(e))
+    {
+      rat = exprToQ(e);
+      irr = 0;
+      return true;
+    }
+
+    // UN_MINUS(x)
+    if (isOpX<UN_MINUS>(e))
+    {
+      if (!toSqrtPair(e->left(), sqrtE, rat, irr))
+        return false;
+      rat = -rat;
+      irr = -irr;
+      return true;
+    }
+
+    // MULT — collect rational coefficient and at most one sqrtE factor
+    if (isOpX<MULT>(e))
+    {
+      ExprVector ops;
+      getMultOps(e, ops);
+      mpq_class coef = 1;
+      int sqrtCount = 0;
+      bool ok = true;
+      for (auto &a : ops)
+      {
+        if (isRatConst(a))
+          coef *= exprToQ(a);
+        else if (a == sqrtE)
+          ++sqrtCount;
+        else
+        {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok)
+        return false;
+      if (sqrtCount == 0)
+      {
+        rat = coef;
+        irr = 0;
+        return true;
+      }
+      if (sqrtCount == 1)
+      {
+        rat = 0;
+        irr = coef;
+        return true;
+      }
+      // sqrtCount >= 2: each pair of sqrtE factors contributes N
+      cpp_int N = getSqrtVal(sqrtE);
+      mpq_class Nq(N.str());
+      int pairs = sqrtCount / 2;
+      for (int p = 0; p < pairs; ++p)
+        coef *= Nq;
+      if (sqrtCount % 2 == 0)
+      {
+        rat = coef;
+        irr = 0;
+        return true;
+      }
+      else
+      {
+        rat = 0;
+        irr = coef;
+        return true;
+      }
+    }
+
+    // PLUS — sum each sub-term
+    if (isOpX<PLUS>(e))
+    {
+      rat = 0;
+      irr = 0;
+      for (unsigned i = 0; i < e->arity(); ++i)
+      {
+        mpq_class r, ir;
+        if (!toSqrtPair(e->arg(i), sqrtE, r, ir))
+          return false;
+        rat += r;
+        irr += ir;
+      }
+      rat.canonicalize();
+      irr.canonicalize();
+      return true;
+    }
+
+    // MINUS a - b
+    if (isOpX<MINUS>(e) && e->arity() == 2)
+    {
+      mpq_class r1, i1, r2, i2;
+      if (!toSqrtPair(e->left(), sqrtE, r1, i1) ||
+          !toSqrtPair(e->right(), sqrtE, r2, i2))
+        return false;
+      rat = r1 - r2;
+      irr = i1 - i2;
+      rat.canonicalize();
+      irr.canonicalize();
+      return true;
+    }
+
+    return false; // cannot decompose
+  }
+
+  /// Convert a (rat, irr) pair back to an Expr:  rat + irr*sqrtE
+  static Expr fromSqrtPair(mpq_class rat, mpq_class irr,
+                           Expr sqrtE, ExprFactory &efac)
+  {
+    rat.canonicalize();
+    irr.canonicalize();
+    Expr ratE = (rat != 0) ? qToExpr(rat, efac) : nullptr;
+    Expr irrE = nullptr;
+    if (irr != 0)
+    {
+      if (irr == 1)
+        irrE = sqrtE;
+      else if (irr == -1)
+        irrE = mk<UN_MINUS>(sqrtE);
+      else
+        irrE = mk<MULT>(qToExpr(irr, efac), sqrtE);
+    }
+    if (ratE && irrE)
+      return mk<PLUS>(ratE, irrE);
+    if (ratE)
+      return ratE;
+    if (irrE)
+      return irrE;
+    return mkMPZ(0, efac);
+  }
+
+  /// Find the first sqrtN constant occurring anywhere in \p e.
+  /// Returns nullptr if none found.
+  static Expr findSqrtConst(Expr e)
+  {
+    if (isSqrtConst(e))
+      return e;
+    for (unsigned i = 0; i < e->arity(); ++i)
+    {
+      Expr r = findSqrtConst(e->arg(i));
+      if (r)
+        return r;
+    }
+    return nullptr;
+  }
+
+  /// Top-level sqrt-aware simplification for MULT and PLUS nodes.
+  /// Called from SimplifyArithmExpr after the standard reductions.
+  static Expr simplifySqrtExpr(Expr e)
+  {
+    Expr sqrtE = findSqrtConst(e);
+    if (!sqrtE)
+      return e; // no sqrt constant — nothing to do
+
+    cpp_int N = getSqrtVal(sqrtE);
+    mpq_class Nq(N.str());
+    ExprFactory &efac = e->getFactory();
+
+    // ── MULT ──
+    if (isOpX<MULT>(e))
+    {
+      ExprVector ops;
+      getMultOps(e, ops);
+
+      // Accumulate product in Q(√N)
+      mpq_class pRat = 1, pIrr = 0; // start with 1 + 0·√N
+      bool allDecomposed = true;
+      for (auto &a : ops)
+      {
+        mpq_class r, ir;
+        if (!toSqrtPair(a, sqrtE, r, ir))
+        {
+          allDecomposed = false;
+          break;
+        }
+        // (pRat + pIrr·√N) × (r + ir·√N)
+        mpq_class newRat = pRat * r + pIrr * ir * Nq;
+        mpq_class newIrr = pRat * ir + pIrr * r;
+        pRat = newRat;
+        pIrr = newIrr;
+      }
+      if (allDecomposed)
+        return fromSqrtPair(pRat, pIrr, sqrtE, efac);
+
+      // Partial: at least replace sqrtE*sqrtE pairs
+      mpq_class coef = 1;
+      ExprVector rem;
+      int sqrtCount = 0;
+      for (auto &a : ops)
+      {
+        if (isRatConst(a))
+          coef *= exprToQ(a);
+        else if (a == sqrtE)
+          ++sqrtCount;
+        else
+          rem.push_back(a);
+      }
+      int pairs = sqrtCount / 2;
+      for (int p = 0; p < pairs; ++p)
+        coef *= Nq;
+      if (sqrtCount % 2 == 1)
+        rem.push_back(sqrtE);
+      coef.canonicalize();
+      Expr num = qToExpr(coef, efac);
+      if (rem.empty() || coef == 0)
+        return num;
+      if (coef == 1)
+        return mkmult(rem, efac);
+      rem.insert(rem.begin(), num);
+      return mkmult(rem, efac);
+    }
+
+    // ── PLUS ──
+    if (isOpX<PLUS>(e))
+    {
+      mpq_class sumRat = 0, sumIrr = 0;
+      ExprVector other; // terms we can't decompose
+      for (unsigned i = 0; i < e->arity(); ++i)
+      {
+        mpq_class r, ir;
+        if (toSqrtPair(e->arg(i), sqrtE, r, ir))
+        {
+          sumRat += r;
+          sumIrr += ir;
+        }
+        else
+        {
+          other.push_back(e->arg(i));
+        }
+      }
+      Expr simplified = fromSqrtPair(sumRat, sumIrr, sqrtE, efac);
+      if (other.empty())
+        return simplified;
+      other.push_back(simplified);
+      return mkplus(other, efac);
+    }
+
+    return e;
   }
 
   static Expr simplifyArithmDisjunctions(Expr fla, bool keepRedundandDisj);
@@ -1397,12 +1929,14 @@ namespace ufo
     {
       if (isOpX<PLUS>(exp) || isOpX<MINUS>(exp))
       {
-        return simplifyPlus(exp);
+        Expr r = simplifyPlus(exp);
+        return simplifySqrtExpr(r);
       }
 
       if (isOpX<MULT>(exp))
       {
-        return simplifyMult(exp);
+        Expr r = simplifyMult(exp);
+        return simplifySqrtExpr(r);
       }
 
       if (isOpX<MOD>(exp))
@@ -1420,12 +1954,12 @@ namespace ufo
         return additiveInverse(exp->left());
       }
 
-      if (isOp<ComparissonOp>(exp) && isNumeric(exp->right()))
+      if (isOp<ComparissonOp>(exp) && isArithm(exp->right()))
       {
         return simplifyCmp(exp);
       }
 
-      if (isOpX<ITE>(exp) && isNumeric(exp->right()))
+      if (isOpX<ITE>(exp) && isArithm(exp->right()))
       {
         return simplifyIte(exp);
       }

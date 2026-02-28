@@ -564,6 +564,12 @@ namespace ufo
     typedef ZSolver<Z> this_type;
     typedef ZModel<Z> Model;
 
+    /// Tag type: construct a solver without push() so that Z3's
+    /// combined_solver stays in non-incremental (tactic) mode.
+    struct NoPush
+    {
+    };
+
     ZSolver(Z &z) : z3(z), ctx(z.get_ctx()), solver(z.get_ctx()), efac(z.get_efac())
     {
       solver.push();
@@ -577,6 +583,32 @@ namespace ufo
     ZSolver(Z &z, unsigned to) : z3(z), ctx(z.get_ctx()), solver(z.get_ctx()), efac(z.get_efac())
     {
       solver.push();
+      ZParams<Z> p(z);
+      p.set("timeout", to);
+      solver.set(p);
+    }
+
+    ZSolver(Z &z, const char *logic, unsigned to) : z3(z), ctx(z.get_ctx()), solver(z.get_ctx(), logic), efac(z.get_efac())
+    {
+      solver.push();
+      ZParams<Z> p(z);
+      p.set("timeout", to);
+      solver.set(p);
+    }
+
+    /// Construct a solver for the given logic + timeout WITHOUT calling
+    /// push().  Z3's combined_solver permanently enters incremental mode
+    /// on the first push() or pop(), routing all check-sat calls to the
+    /// plain SMT kernel (solver2) instead of the tactic pipeline
+    /// (solver1).  For QF_NRA this means nlsat's preprocessing
+    /// (simplify, propagate_values, qe_lite) is bypassed, causing
+    /// orders-of-magnitude slowdowns.  Use this constructor when you
+    /// need non-incremental tactic performance and will NOT call
+    /// push/pop/reset on the resulting solver.
+    ZSolver(Z &z, const char *logic, unsigned to, NoPush)
+        : z3(z), ctx(z.get_ctx()), solver(z.get_ctx(), logic), efac(z.get_efac())
+    {
+      depth = 0;
       ZParams<Z> p(z);
       p.set("timeout", to);
       solver.set(p);
@@ -721,6 +753,17 @@ namespace ufo
       solver.pop(depth);
       solver.push();
       depth = 1;
+    }
+
+    /// Reset the solver without using push/pop, preserving
+    /// non-incremental (tactic) mode for NoPush solvers.
+    /// Z3_solver_reset clears all assertions AND resets the
+    /// incremental-mode flag in combined_solver, so nlsat's
+    /// full tactic pipeline remains active.
+    void resetNoPush()
+    {
+      Z3_solver_reset(ctx, solver);
+      depth = 0;
     }
   };
 

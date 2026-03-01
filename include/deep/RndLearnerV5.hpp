@@ -1264,20 +1264,35 @@ namespace ufo
                 std::ofstream smtFile(filename);
                 if (smtFile.is_open())
                 {
+                    // Temporarily disable decimal printing so rationals
+                    // appear as (/ p q) instead of truncated decimals.
+                    Z3_global_param_set("pp.decimal", "false");
+
                     // smtFile << "(set-info :smt-lib-version 2.6)\n";
                     smtFile << "(set-logic QF_NRA)\n";
 
+                    // Convert all MPZ (integer) leaves to MPQ (rational)
+                    // so that Z3 marshals them with Real sort, avoiding
+                    // (to_real N) coercions in the output.
+                    ExprVector assertVec;
+                    assertVec.reserve(exprs.size());
+                    for (auto &e : exprs)
+                        assertVec.push_back(mpzToMpq(e));
+
                     // Emit (declare-fun ...) for every uninterpreted constant
                     // appearing in the assertions, with correct sorts.
-                    ExprVector assertVec(exprs.begin(), exprs.end());
                     smtFile << m_z3.toSmtLibDecls(assertVec);
 
-                    for (auto &e : exprs)
+                    for (auto &e : assertVec)
                         smtFile << "(assert " << m_z3.toSmtLib(e) << ")\n";
 
                     smtFile << "(check-sat)\n";
                     smtFile << "(exit)\n";
                     smtFile.close();
+
+                    // Restore decimal printing
+                    Z3_global_param_set("pp.decimal", "true");
+
                     if (printLog >= 5)
                     {
                         outs() << "Dumped SMT-LIB2 query to " << filename << "\n";
@@ -2174,6 +2189,38 @@ namespace ufo
             return replaceAll(expr, replacements);
         }
 
+        /// Recursively convert every MPZ (integer) leaf in \p e to an
+        /// equivalent MPQ (rational) leaf.  This ensures that expressions
+        /// round-tripped through Z3's parser are marshalled back to Z3
+        /// with Real sort, avoiding the problem where bare integer
+        /// literals like 9 get printed as "9" instead of "(/ 9 1)".
+        Expr mpzToMpq(Expr e)
+        {
+            if (!e)
+                return e;
+            if (isOpX<MPZ>(e))
+            {
+                mpz_class z = getTerm<mpz_class>(e);
+                return mkTerm(mpq_class(z), m_efac);
+            }
+            // Recurse into children
+            bool changed = false;
+            std::vector<Expr> kids(e->arity());
+            for (unsigned i = 0; i < e->arity(); ++i)
+            {
+                kids[i] = mpzToMpq(e->arg(i));
+                if (kids[i] != e->arg(i))
+                    changed = true;
+            }
+            if (!changed)
+                return e;
+            if (kids.size() == 0)
+                return e;
+            if (kids.size() == 1)
+                return e->getFactory().mkNary(e->op(), kids.begin(), kids.end());
+            return e->getFactory().mkNary(e->op(), kids.begin(), kids.end());
+        }
+
         // Only works for expressions that are either numeric
         // constants or include "_i_0"
         Expr str_to_expr(std::string exprString, std::vector<std::string> sqrts = std::vector<std::string>(), int i = 0)
@@ -2215,6 +2262,10 @@ namespace ufo
             // Extract just the expression from the equality
             // result should be: (and (= _x (/ 10 5)))
             // We want: (/ 10 5)
+
+            // Convert MPZ leaves to MPQ so that all numeric
+            // constants are Real-sorted when marshalled back to Z3.
+            result = mpzToMpq(result);
 
             if (isOpX<EQ>(result))
             {
@@ -2624,7 +2675,7 @@ namespace ufo
             previousUpper[v] = oneReal;
             previousLower[v] = oneReal;
         }
-        Expr itr = zeroReal;
+
         boost::container::flat_set<Expr> hasDeviated;
         std::unordered_map<Expr, phaseLemmas> phaseCond;
         ExprVector symbolsToKeep;
@@ -2678,9 +2729,20 @@ namespace ufo
 
         ds.numericRoots[i] = numeralsToKeep;
         ds.symbolicRoots[i] = symbolsToKeep;
+        Expr itr = zeroReal;
+        bool rolledBack = false;
         for (size_t j = 1; j < max_iterations; j++)
         {
-            itr = simplifyArithm(mk<PLUS>(itr, oneReal));
+            // --- Snapshot state before this iteration so we can roll back ---
+            Expr savedItr = itr;
+            ExprMap savedUpper = previousUpper;
+            ExprMap savedLower = previousLower;
+            ExprSet savedLemmas = ds.learnedExprs[i];
+            ExprVector savedAnnotations = annotations[i];
+            auto savedDeviated = hasDeviated;
+
+            itr = ds.mpzToMpq(simplifyArithm(mk<PLUS>(itr, oneReal)));
+            bool needsRollback = false;
 
             // Assumes we only have roots 0<r<1 and 1<r
             for (const auto &tuple : boost::combine(ds.numericRoots[i], ds.symbolicRoots[i]))
@@ -2694,12 +2756,11 @@ namespace ufo
                 Expr bnd = mk<LEQ>(s, newBound);
                 Expr newLemma = mk<IMPL>(cond, bnd);
                 annotations[i][0] = newLemma;
+                if (hasDeviated.count(s) > 0)
                 {
-                    boost::tribool factResult = ds.checkFact(i, annotations);
-                    boost::tribool consResult = (factResult == true)
-                        ? ds.checkConsecution(i, annotations)
-                        : boost::tribool(false);
-                    if (!(factResult == true && consResult == true))
+                    // boost::tribool factResult = ds.checkFact(i, annotations);
+                    boost::tribool consResult = ds.checkConsecution(i, annotations);
+                    if (!(consResult == true))
                     {
                         hasDeviated.insert(s);
                         do
@@ -2708,19 +2769,14 @@ namespace ufo
                             bnd = mk<LEQ>(s, newBound);
                             newLemma = mk<IMPL>(cond, bnd);
                             annotations[i][0] = newLemma;
-                            factResult = ds.checkFact(i, annotations);
-                            consResult = (factResult == true)
-                                ? ds.checkConsecution(i, annotations)
-                                : boost::tribool(false);
-                        } while (!(factResult == true && consResult == true));
+                            consResult = ds.checkConsecution(i, annotations);
+                        } while (!(consResult == true));
                     }
                 }
 
                 ds.learnedExprs[i].insert(newLemma);
                 previousUpper[s] = newBound;
 
-                // --- Lower bound ---
-                // Skip recomputation if upper and lower have never diverged
                 if (hasDeviated.count(s) > 0)
                 {
                     newBound = simplifyArithm(mk<MULT>(previousLower[s], n));
@@ -2729,26 +2785,38 @@ namespace ufo
                 cond = phaseCond[s].min(itr);
                 bnd = mk<GEQ>(s, newBound);
                 newLemma = mk<IMPL>(cond, bnd);
-                annotations[i][0] = newLemma;
+                annotations[i][0] = mk<AND>(newLemma, annotations[i][0]);
                 {
-                    boost::tribool factResult = ds.checkFact(i, annotations);
-                    boost::tribool consResult = (factResult == true)
-                        ? ds.checkConsecution(i, annotations)
-                        : boost::tribool(false);
-                    if (!(factResult == true && consResult == true))
+                    boost::tribool consResult = ds.checkConsecution(i, annotations);
+                    if (!consResult == true)
                     {
-                        hasDeviated.insert(s);
+                        if (hasDeviated.count(s) == 0)
+                        {
+                            hasDeviated.insert(s);
+                            // Lower-bound consecution failed — roll back this
+                            // iteration's accumulated state and exit the loop.
+                            if (debug >= 3)
+                                outs() << "Lower-bound deviation at j=" << j
+                                       << " for root " << s << "; rolling back.\n";
+
+                            itr = savedItr;
+                            previousUpper = savedUpper;
+                            previousLower = savedLower;
+                            ds.learnedExprs[i] = savedLemmas;
+                            annotations[i] = savedAnnotations;
+                            hasDeviated = savedDeviated;
+                            needsRollback = true;
+                            break; // break inner root loop
+                        }
+
                         do
                         {
                             newBound = simplifyArithm(mk<MINUS>(newBound, ds.expEpsilon));
                             bnd = mk<GEQ>(s, newBound);
                             newLemma = mk<IMPL>(cond, bnd);
                             annotations[i][0] = newLemma;
-                            factResult = ds.checkFact(i, annotations);
-                            consResult = (factResult == true)
-                                ? ds.checkConsecution(i, annotations)
-                                : boost::tribool(false);
-                        } while (!(factResult == true && consResult == true));
+                            consResult = ds.checkConsecution(i, annotations);
+                        } while (!(consResult == true));
                     }
                 }
 
@@ -2781,6 +2849,12 @@ namespace ufo
 
                 ds.learnedExprs[i].insert(newLemma);
                 previousLower[s] = newBound;
+            }
+
+            if (needsRollback)
+            {
+                rolledBack = true;
+                break; // break outer iteration loop
             }
         }
 

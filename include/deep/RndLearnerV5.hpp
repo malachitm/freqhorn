@@ -2730,20 +2730,10 @@ namespace ufo
         ds.numericRoots[i] = numeralsToKeep;
         ds.symbolicRoots[i] = symbolsToKeep;
         Expr itr = zeroReal;
-        bool rolledBack = false;
+        map<int, ExprVector> verifiedLemmas;
         for (size_t j = 1; j < max_iterations; j++)
         {
-            // --- Snapshot state before this iteration so we can roll back ---
-            Expr savedItr = itr;
-            ExprMap savedUpper = previousUpper;
-            ExprMap savedLower = previousLower;
-            ExprSet savedLemmas = ds.learnedExprs[i];
-            ExprVector savedAnnotations = annotations[i];
-            auto savedDeviated = hasDeviated;
-
             itr = ds.mpzToMpq(simplifyArithm(mk<PLUS>(itr, oneReal)));
-            bool needsRollback = false;
-
             // Assumes we only have roots 0<r<1 and 1<r
             for (const auto &tuple : boost::combine(ds.numericRoots[i], ds.symbolicRoots[i]))
             {
@@ -2751,22 +2741,20 @@ namespace ufo
                 boost::tie(n, s) = tuple;
 
                 // --- Upper bound ---
-                Expr newBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
+                Expr upperBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
                 Expr cond = phaseCond[s].max(itr);
-                Expr bnd = mk<LEQ>(s, newBound);
+                Expr bnd = mk<LEQ>(s, upperBound);
                 Expr newLemma = mk<IMPL>(cond, bnd);
                 annotations[i][0] = newLemma;
-                if (hasDeviated.count(s) > 0)
                 {
-                    // boost::tribool factResult = ds.checkFact(i, annotations);
                     boost::tribool consResult = ds.checkConsecution(i, annotations);
                     if (!(consResult == true))
                     {
                         hasDeviated.insert(s);
                         do
                         {
-                            newBound = simplifyArithm(mk<PLUS>(newBound, ds.expEpsilon));
-                            bnd = mk<LEQ>(s, newBound);
+                            upperBound = simplifyArithm(mk<PLUS>(upperBound, ds.expEpsilon));
+                            bnd = mk<LEQ>(s, upperBound);
                             newLemma = mk<IMPL>(cond, bnd);
                             annotations[i][0] = newLemma;
                             consResult = ds.checkConsecution(i, annotations);
@@ -2774,47 +2762,34 @@ namespace ufo
                     }
                 }
 
-                ds.learnedExprs[i].insert(newLemma);
-                previousUpper[s] = newBound;
+                Expr upperLemma = newLemma;
+                previousUpper[s] = upperBound;
 
+                Expr lowerBound;
                 if (hasDeviated.count(s) > 0)
                 {
-                    newBound = simplifyArithm(mk<MULT>(previousLower[s], n));
+                    lowerBound = simplifyArithm(mk<MULT>(previousLower[s], n));
+                }
+                else
+                {
+                    lowerBound = upperBound;
                 }
 
                 cond = phaseCond[s].min(itr);
-                bnd = mk<GEQ>(s, newBound);
+                bnd = mk<GEQ>(s, lowerBound);
                 newLemma = mk<IMPL>(cond, bnd);
-                annotations[i][0] = mk<AND>(newLemma, annotations[i][0]);
+                annotations[i][0] = mk<AND>(upperLemma, newLemma);
                 {
                     boost::tribool consResult = ds.checkConsecution(i, annotations);
                     if (!consResult == true)
                     {
-                        if (hasDeviated.count(s) == 0)
-                        {
-                            hasDeviated.insert(s);
-                            // Lower-bound consecution failed — roll back this
-                            // iteration's accumulated state and exit the loop.
-                            if (debug >= 3)
-                                outs() << "Lower-bound deviation at j=" << j
-                                       << " for root " << s << "; rolling back.\n";
-
-                            itr = savedItr;
-                            previousUpper = savedUpper;
-                            previousLower = savedLower;
-                            ds.learnedExprs[i] = savedLemmas;
-                            annotations[i] = savedAnnotations;
-                            hasDeviated = savedDeviated;
-                            needsRollback = true;
-                            break; // break inner root loop
-                        }
-
+                        hasDeviated.insert(s);
                         do
                         {
-                            newBound = simplifyArithm(mk<MINUS>(newBound, ds.expEpsilon));
-                            bnd = mk<GEQ>(s, newBound);
+                            lowerBound = simplifyArithm(mk<MINUS>(lowerBound, ds.expEpsilon));
+                            bnd = mk<GEQ>(s, lowerBound);
                             newLemma = mk<IMPL>(cond, bnd);
-                            annotations[i][0] = newLemma;
+                            annotations[i][0] = mk<AND>(upperLemma, newLemma);
                             consResult = ds.checkConsecution(i, annotations);
                         } while (!(consResult == true));
                     }
@@ -2847,14 +2822,22 @@ namespace ufo
                     }
                 }
 
-                ds.learnedExprs[i].insert(newLemma);
-                previousLower[s] = newBound;
-            }
-
-            if (needsRollback)
-            {
-                rolledBack = true;
-                break; // break outer iteration loop
+                // Use an interval condition instead of a point equality so
+                // that non-integer values of _i_0 (e.g. 40.5) cannot slip
+                // between the cracks and evade all learned lemmas.
+                Expr nextItr = ds.mpzToMpq(simplifyArithm(mk<PLUS>(itr, oneReal)));
+                Expr lemma = mk<AND>(mk<GEQ>(index, itr), mk<LT>(index, nextItr));
+                Expr resultant;
+                if (hasDeviated.count(s) == 0)
+                {
+                    resultant = mk<EQ>(s, upperBound);
+                }
+                else
+                {
+                    resultant = mk<AND>(mk<LEQ>(s, upperBound), mk<GEQ>(s, lowerBound));
+                }
+                ds.learnedExprs[i].insert(mk<IMPL>(lemma, resultant));
+                previousLower[s] = lowerBound;
             }
         }
 

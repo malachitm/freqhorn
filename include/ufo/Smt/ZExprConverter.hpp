@@ -110,6 +110,59 @@ namespace ufo
         std::string sname = boost::lexical_cast<std::string>(op.get());
         res = Z3_mk_numeral(ctx, sname.c_str(), sort);
       }
+      // Marshal an algebraic number (ALNUM) back to Z3 by
+      // reconstructing its defining polynomial and extracting the
+      // requested root via Z3_algebraic_roots.
+      else if (isOpX<ALNUM>(e))
+      {
+        const ALNUM &op = dynamic_cast<const ALNUM &>(e->op());
+        const AlgebraicNum &alnum = op.get();
+
+        Z3_sort real_sort = Z3_mk_real_sort(ctx);
+        // Build a fresh variable for the univariate polynomial
+        Z3_ast x = Z3_mk_const(ctx,
+                               ctx.str_symbol("__alnum_x"), real_sort);
+
+        // Construct polynomial: c_0 + c_1*x + c_2*x^2 + ... + c_n*x^n
+        // Start with c_0
+        Z3_ast poly = Z3_mk_numeral(ctx,
+                                    alnum.poly[0].get_str().c_str(), real_sort);
+
+        Z3_ast xPow = x; // tracks x^k
+        for (size_t k = 1; k < alnum.poly.size(); ++k)
+        {
+          Z3_ast ck = Z3_mk_numeral(ctx,
+                                    alnum.poly[k].get_str().c_str(), real_sort);
+          Z3_ast termArgs[2] = {ck, xPow};
+          Z3_ast term = Z3_mk_mul(ctx, 2, termArgs);
+          Z3_ast sumArgs[2] = {poly, term};
+          poly = Z3_mk_add(ctx, 2, sumArgs);
+          if (k + 1 < alnum.poly.size())
+          {
+            Z3_ast mulArgs[2] = {xPow, x};
+            xPow = Z3_mk_mul(ctx, 2, mulArgs);
+          }
+        }
+
+        // Extract roots of the polynomial and pick the one at rootIdx
+        Z3_ast_vector roots = Z3_algebraic_roots(ctx, poly, 0, nullptr);
+        ctx.check_error();
+        Z3_ast_vector_inc_ref(ctx, roots);
+        unsigned nRoots = Z3_ast_vector_size(ctx, roots);
+        if (alnum.rootIdx < nRoots)
+        {
+          res = Z3_ast_vector_get(ctx, roots, alnum.rootIdx);
+        }
+        else
+        {
+          // Fallback: send rational midpoint approximation
+          mpq_class mid = alnum.midpoint();
+          mid.canonicalize();
+          std::string smid = boost::lexical_cast<std::string>(mid);
+          res = Z3_mk_numeral(ctx, smid.c_str(), real_sort);
+        }
+        Z3_ast_vector_dec_ref(ctx, roots);
+      }
       else if (bv::is_bvnum(e))
       {
         z3::sort sort(ctx, Z3_mk_bv_sort(ctx, bv::width(e->arg(1))));
@@ -532,27 +585,43 @@ namespace ufo
           assert(0 && "Unsupported numeric constant");
         }
       }
-      // Handle algebraic (irrational) numbers like sqrt(N).
-      // Z3 represents these as Z3_APP_AST internally, so we must detect
-      // them via Z3_is_algebraic_number() before the general APP_AST handling.
-      // We approximate using Z3's rational lower/upper bound API and average them.
+      // Handle algebraic (irrational) numbers returned by Z3
+      // (e.g. root-obj expressions from nlsat).  We preserve the full
+      // algebraic number representation: isolating rational interval,
+      // defining integer-polynomial coefficients, and root index.
       else if (Z3_is_algebraic_number(ctx, z))
       {
-        // Get tight rational bounds with high precision (20 decimal digits).
-        // algebraic_lower/upper return Z3_NUMERAL_AST values (exact rationals).
-        Z3_ast lower = Z3_get_algebraic_number_lower(ctx, z, 20);
+        AlgebraicNum alnum;
+
+        // --- Isolating rational interval (20-digit precision) ----------
+        Z3_ast zLower = Z3_get_algebraic_number_lower(ctx, z, 20);
+        ctx.check_error();
+        Z3_ast zUpper = Z3_get_algebraic_number_upper(ctx, z, 20);
         ctx.check_error();
 
-        // The lower bound is a Z3_NUMERAL_AST with REAL_SORT.
-        // Extract its string representation directly via Z3 C API.
-        Z3_sort lsort = Z3_get_sort(ctx, lower);
-        std::string snum = Z3_get_numeral_string(ctx, lower);
+        alnum.lower = mpq_class(Z3_get_numeral_string(ctx, zLower));
+        alnum.lower.canonicalize();
+        alnum.upper = mpq_class(Z3_get_numeral_string(ctx, zUpper));
+        alnum.upper.canonicalize();
 
-        // Z3_get_numeral_string for reals returns a ratio like "num/den"
-        // or a plain integer string. mpq_class can parse both forms.
-        mpq_class approx(snum);
-        approx.canonicalize();
-        return mkTerm(approx, efac);
+        // --- Defining polynomial coefficients -------------------------
+        Z3_ast_vector polyVec = Z3_algebraic_get_poly(ctx, z);
+        ctx.check_error();
+        Z3_ast_vector_inc_ref(ctx, polyVec);
+        unsigned polyLen = Z3_ast_vector_size(ctx, polyVec);
+        alnum.poly.reserve(polyLen);
+        for (unsigned pi = 0; pi < polyLen; ++pi)
+        {
+          Z3_ast coeff = Z3_ast_vector_get(ctx, polyVec, pi);
+          alnum.poly.push_back(mpz_class(Z3_get_numeral_string(ctx, coeff)));
+        }
+        Z3_ast_vector_dec_ref(ctx, polyVec);
+
+        // --- Root index -----------------------------------------------
+        alnum.rootIdx = Z3_algebraic_get_i(ctx, z);
+        ctx.check_error();
+
+        return mkTerm(alnum, efac);
       }
       else if (kind == Z3_SORT_AST)
       {

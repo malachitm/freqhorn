@@ -2306,6 +2306,12 @@ namespace ufo
                 mpq_class val = getTerm<mpq_class>(expr);
                 return val.get_d();
             }
+            // Leaf: algebraic (irrational) number — use midpoint approximation
+            else if (isOpX<ALNUM>(expr))
+            {
+                const AlgebraicNum &a = getTerm<AlgebraicNum>(expr);
+                return a.to_double();
+            }
             // Division
             else if (isOpX<expr::op::DIV>(expr))
             {

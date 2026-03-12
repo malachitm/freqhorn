@@ -2,3 +2,7 @@
 	path = tools/polar
 	url = https://github.com/malachitm/polar.git
 	branch = master
+[submodule "pwa-horn-benchmarks"]
+	path = pwa-horn-benchmarks
+	url = https://github.com/malachitm/pwa-horn-benchmarks.git
+	branch = main

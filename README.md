@@ -3,18 +3,106 @@ FreqHorn
 
 Satisfiability solver for constrained Horn clauses (CHC) based on <a href="https://github.com/Z3Prover/z3">Z3</a> SMT solver. It combines syntax-guided methods to inductive invariant synthesis with data learning and quantified reasoning over arrays. Find more details at <a href="http://www.cs.fsu.edu/~grigory/freqhorn-arrays.pdf">CAV'19</a> and <a href="http://www.cs.fsu.edu/~grigory/multi-freqhorn.pdf">FMCAD'18</a> papers.
 
-Installation
-============
+Setup
+=====
 
-Compiles with gcc-7 (on Linux) and clang-1001 (on Mac). Assumes preinstalled <a href="https://gmplib.org/">GMP</a>, and Boost (libboost-system1.74-dev) packages. Additionally, armadillo package to get candidates from behaviors. 
+FreqHorn itself is a native C++ project, but the phase-error workflow in `RndLearnerV5.hpp` also depends on the POLAR Python tool for closed-form generation. In this repository, both `tools/polar` and `pwa-horn-benchmarks` are tracked as Git submodules. A complete setup therefore has three pieces:
 
-* `cd aeval ; mkdir build ; cd build`
-* `cmake ../`
-* `make` to build dependencies (Z3)
-* `make` (again) to build FreqHorn
+1. system packages required to build FreqHorn,
+2. the POLAR repository and its Python environment,
+3. optionally, the PWA benchmark repository if benchmark analysis is needed.
 
-The binary of FreqHorn can be found at `build/tools/deep/`.
-Run `freqhorn --help` for the usage info.
+Prerequisites
+-------------
+
+FreqHorn is developed for Linux and also builds on macOS. Users should have:
+
+* a C++ compiler with C++17 support,
+* CMake,
+* GNU Make,
+* <a href="https://gmplib.org/">GMP</a>,
+* Boost (including the system component),
+* Armadillo.
+
+On Debian/Ubuntu-like systems this typically means installing packages such as:
+
+* `build-essential`
+* `cmake`
+* `libgmp-dev`
+* `libgmpxx4ldbl`
+* `libboost-system-dev`
+* `libarmadillo-dev`
+* `python3`
+* `python3-venv`
+* `python3-pip`
+
+Repository Bootstrap
+--------------------
+
+Clone the repository and initialize its submodules:
+
+* `git clone https://github.com/malachitm/freqhorn.git`
+* `cd freqhorn`
+* `git submodule update --init --recursive`
+
+This populates:
+
+* `tools/polar` from `https://github.com/malachitm/polar.git`
+* `pwa-horn-benchmarks` from `https://github.com/malachitm/pwa-horn-benchmarks.git`
+
+If the repository was cloned earlier without submodules, running `git submodule update --init --recursive` later is sufficient.
+
+FreqHorn Build
+--------------
+
+From the repository root:
+
+* `mkdir -p build`
+* `cd build`
+* `cmake ..`
+* `make`
+* `make`
+
+The first build step is often used to fetch and build dependencies such as Z3; the second builds FreqHorn itself.
+
+The `freqhorn` binary will be located in `build/tools/deep/`.
+Run `freqhorn --help` for usage information.
+
+POLAR Setup
+-----------
+
+The phase-error path expects the POLAR submodule to be present at `tools/polar` inside this repository.
+
+Then create and populate POLAR's virtual environment:
+
+* `cd tools/polar`
+* `python3 -m venv .venv`
+* `source .venv/bin/activate`
+* `pip install -r requirements.txt`
+
+After that, return to the FreqHorn root. The current `RndLearnerV5.hpp` workflow expects POLAR's interpreter at `tools/polar/.venv/bin/python3` and its script at `tools/polar/closedforms2.py`.
+
+Optional Benchmark Repository
+-----------------------------
+
+If the goal is to run benchmark analysis over the PWA benchmark suite, the `pwa-horn-benchmarks` submodule should also be initialized in the workspace.
+
+If it is missing, populate it with:
+
+* `git submodule update --init pwa-horn-benchmarks`
+
+This repository provides benchmark inputs and supporting data for comparing solver behavior; it is not required for building the core `freqhorn` binary.
+
+Typical Workflow
+----------------
+
+For a user who wants the full setup, the expected sequence is:
+
+* clone this repository,
+* initialize submodules with `git submodule update --init --recursive`,
+* set up the POLAR virtual environment in `tools/polar/.venv`,
+* configure and build FreqHorn in `build/`,
+* run `build/tools/deep/freqhorn` on SMT2 inputs or benchmark files.
 
 FreqHorn does not automatically find counterexamples (unless the CHC system can be trivially simplified), but its supplementary tool `expl` tool does. We recommend running `freqhorn` and `expl` concurrently.
 

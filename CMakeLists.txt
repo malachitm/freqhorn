@@ -1,7 +1,12 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project (FreqHorn)
-set(CMAKE_CXX_STANDARD 14)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/deep/Config.hpp.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/include/deep/Config.hpp"
+  @ONLY
+)
+#set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set (FreqHorn_VERSION_MAJOR 0)
 set (FreqHorn_VERSION_MINOR 5)
@@ -179,5 +184,8 @@ include_directories(BEFORE ${CMAKE_CURRENT_BINARY_DIR}/include)
 include_directories(BEFORE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}/include)
+
+set(POLAR_PYTHON_EXECUTABLE "${CMAKE_CURRENT_SOURCE_DIR}/tools/polar/.venv/bin/python3"
+    CACHE FILEPATH "Path to the Python interpreter for POLAR")
 
 add_subdirectory(tools)

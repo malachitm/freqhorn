@@ -2,6 +2,7 @@
 #define RNDLEARNERV5__HPP__
 
 #include "RndLearnerV4.hpp"
+#include "deep/Config.hpp"
 #include <memory>
 #include "deep/Horn.hpp"    // For CHCs, HornRuleExt
 #include "ufo/Expr.hpp"     // For Expr, ExprVector, etc.
@@ -157,6 +158,7 @@ namespace ufo
                                                                                                    false, false, 0, 0, false, _debug) {}
         ~RndLearnerV5() {}
         map<int, Expr> indices;
+        std::string probFilePath;
 
         Expr oneReal = mkTerm(mpq_class("1"), m_efac);
         Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
@@ -1260,7 +1262,7 @@ namespace ufo
             if (printLog >= 5)
             {
                 static int queryCount = 0;
-                std::string filename = "/tmp/freqhorn_query_" + std::to_string(queryCount++) + ".smt2";
+                std::string filename = std::string(FREQHORN_SOURCE_DIR) + "/debug_queries/freqhorn_query_" + std::to_string(queryCount++) + ".smt2";
                 std::ofstream smtFile(filename);
                 if (smtFile.is_open())
                 {
@@ -1802,10 +1804,16 @@ namespace ufo
                          [&](Expr e)
                          { return contains(qr[i]->body, e); });
             // Use absolute path instead of ~ to ensure proper expansion in popen/system
-            const char *home = std::getenv("HOME");
-            std::string call(home ? std::string(home) + "/tools/freqhorn/tools/polar/.venv/bin/python3 " : "");
-            call += home ? std::string(home) + "/tools/freqhorn/tools/polar/closedforms2.py" : "~/tools/freqhorn/tools/polar/closedforms2.py";
-            call += " ./out.prob";
+            // const char *home = std::getenv("HOME");
+            // std::string call(home ? std::string(home) + "/tools/freqhorn/tools/polar/.venv/bin/python3 " : "");
+            // call += home ? std::string(home) + "/tools/freqhorn/tools/polar/closedforms2.py" : "~/tools/freqhorn/tools/polar/closedforms2.py";
+
+            // std::string polarBase = std::string(FREQHORN_SOURCE_DIR) + "/tools/polar";
+
+            // std::string call = polarBase + "/.venv/bin/python3 " + polarBase + "/closedforms2.py";
+
+            std::string call = std::string(POLAR_PYTHON_EXECUTABLE) + " " + std::string(FREQHORN_SOURCE_DIR) + "/tools/polar/closedforms2.py";
+            call += " " + probFilePath;
             call += std::accumulate(bodyVar.begin(), bodyVar.end(), string(),
                                     [&](std::string &a, Expr b)
                                     { return a += " " + boost::algorithm::to_lower_copy(getVarName(b)); });
@@ -2225,16 +2233,6 @@ namespace ufo
         // constants or include "_i_0"
         Expr str_to_expr(std::string exprString, std::vector<std::string> sqrts = std::vector<std::string>(), int i = 0)
         {
-            const char *tmpfile = "/tmp/z3_expr_temp.smt2";
-            std::string outfile;
-            //
-            // outs() << resultant << "\n";
-            // std::ofstream outfile(tmpfile);
-            // if (!outfile.is_open())
-            //{
-            // errs() << "Failed to create temp file\n";
-            // return Expr();
-            //}
 
             if (sqrts.size() == 0)
             {
@@ -2242,6 +2240,7 @@ namespace ufo
                 sqrts = sqrtNums;
             }
 
+            std::string outfile;
             // outfile << "(set-logic QF_LIRA)\n";
             outfile += "(declare-const _x Real)\n";
             outfile += "(declare-const n Real)\n";
@@ -2255,9 +2254,6 @@ namespace ufo
 
             // Parse the file
             Expr result = z3_from_smtlib(m_z3, outfile);
-            // Expr result = z3_from_smtlib_file(m_z3, tmpfile);
-            // std::remove(tmpfile);
-            //  outs() << result << "\n";
 
             // Extract just the expression from the equality
             // result should be: (and (= _x (/ 10 5)))
@@ -2372,137 +2368,6 @@ namespace ufo
             // Now extract the numeric value from the expression
             return expr_to_double(expr);
         }
-        /*
-        [[deprecated("This isn't used right now, you can ignore this")]]
-        numExpr_t<double> getNumExpr(std::string s)
-        {
-            Expr temp = str_to_expr(s);
-            if (!temp)
-            {
-                errs() << "Error: Failed to parse expression string: " << s << "\n";
-                throw std::runtime_error("Failed to parse expression string");
-            }
-            return getNumExpr(temp);
-        }
-        [[deprecated("This isn't used right now, you can ignore this")]]
-        numExpr_t<double> getNumExpr(Expr expr)
-        {
-            double d = expr_to_double(expr);
-            numExpr_t<double> x = {d, expr};
-            return x;
-        }
-        [[deprecated("This isn't used right now, you can ignore this")]]
-        numExpr_t<double> getNumExpr(double n)
-        {
-            numExpr_t<double> x = {n, mkTerm(mpq_class(std::to_string(n)), m_efac)};
-            return x;
-        }
-        */
-        /*
-        Expr getBounds(EZ3 &z3, std::string numeric_root, Expr symbolic_root)
-        {
-            std::string test("(and (< 0.0");
-            test += numeric_root;
-            test += ") (< ";
-            test += numeric_root;
-            test += " 1.0))";
-
-            const char *tmpfile = "/tmp/z3_expr_temp.smt2";
-
-            std::ofstream outfile(tmpfile);
-            if (!outfile.is_open())
-            {
-                errs() << "Failed to create temp file\n";
-                return Expr();
-            }
-
-            outfile << "(set-logic QF_LIRA)\n";
-            outfile << "(declare-const _x Bool)\n";
-            outfile << "(assert (= _x " << numeric_root << "))\n";
-            outfile << "(check-sat)\n";
-            outfile.close();
-            Expr result = z3_from_smtlib_file(m_z3, tmpfile);
-            std::remove(tmpfile);
-
-            ZSolver<EZ3> solver(m_z3);
-            solver.assertExpr(result);
-            boost::tribool result = solver.solve();
-        }
-        */
-        void conversion_testing()
-        {
-            outs() << "Testing functions to see if data type conversion works properly\n";
-            std::string s = "(/ 9.0 10.0)";
-            outs() << s << "\n";
-            Expr t = str_to_expr(s);
-            outs() << t << "\n";
-            double d = expr_to_double(t);
-            outs() << std::to_string(d) << "\n";
-            Expr t2 = double_to_expr(d);
-            outs() << t2 << "\n";
-        }
-
-        void let_testing()
-        {
-            Expr varName = mkTerm<string>("x", m_efac);
-            Expr varType = mk<REAL_TY>(m_efac); // or REAL_TY, BOOL_TY, etc.
-            Expr var = bind::realConst(varName);
-            Expr bindingValue = mkTerm(42, m_efac);            // the value to bind
-            Expr bodyExpr = mk<PLUS>(var, mkTerm(10, m_efac)); // body using the variable
-
-            // Create lambda: (lambda ((x Int)) (+ x 10))
-            Expr lambda = bind::abs<LAMBDA>(var, bodyExpr);
-
-            // Beta reduce to simulate let: (let ((x 42)) (+ x 10))
-            Expr letExpr = bind::betaReduce(lambda, bindingValue);
-            outs() << letExpr << "\n";
-        }
-
-        void z3_testing()
-        {
-            const char *tmpfile = "/tmp/z3_expr_temp.smt2";
-
-            std::ofstream outfile(tmpfile);
-            if (!outfile.is_open())
-            {
-                errs() << "Failed to create temp file\n";
-                return;
-            }
-
-            outfile << "(declare-const n Real)\n";
-            outfile << "(assert (> n 0))\n";
-            outfile << "(assert (= 17 (* n n)))\n";
-            outfile << "(check-sat)\n";
-            outfile << "(get-model)\n";
-            outfile.close();
-
-            // Parse the file
-            Expr result = z3_from_smtlib_file(m_z3, tmpfile);
-            std::remove(tmpfile);
-
-            // Extract just the expression from the equality
-            // result should be: (and (= _x (/ 10 5)))
-            // We want: (/ 10 5)
-
-            if (isOpX<EQ>(result))
-            {
-                // Single equality, return RHS (the actual expression)
-                outs() << result->right() << "\n";
-            }
-            else if (isOpX<AND>(result))
-            {
-                // AND of equalities, get first conjunct
-                Expr eq = result->left();
-                if (isOpX<EQ>(eq))
-                    outs() << eq->right() << "\n";
-                else
-                    outs() << eq << "\n";
-            }
-            else
-            {
-                outs() << result << "\n";
-            }
-        }
 
         Expr getInitBody(int i)
         {
@@ -2556,13 +2421,35 @@ namespace ufo
             ruleManager.print(true);
         }
 
-        ds.generatePolarFile2(ruleManager, "out.prob");
+        ds.probFilePath = std::string(FREQHORN_SOURCE_DIR) + "/out.prob";
+        ds.generatePolarFile2(ruleManager, ds.probFilePath);
         /**
          * TODO: Use boost algorithm instead of this home-written
          * function
          */
         std::string output_test = exec(ds.getCallToPolar(i).c_str());
-        nlohmann::json closedformJson = nlohmann::json::parse(output_test);
+        if (output_test.empty())
+        {
+            errs() << "Error: POLAR subprocess returned no output.\n";
+            errs() << "Command was: " << ds.getCallToPolar(i) << "\n";
+            errs() << "Ensure Python venv exists and POLAR dependencies are installed.\n";
+            outs() << "unknown\n";
+            return;
+        }
+        nlohmann::json closedformJson;
+        try
+        {
+            closedformJson = nlohmann::json::parse(output_test);
+        }
+        catch (const nlohmann::json::parse_error &e)
+        {
+            errs() << "Error: Failed to parse POLAR output as JSON.\n";
+            errs() << "POLAR output was:\n"
+                   << output_test << "\n";
+            errs() << "JSON error: " << e.what() << "\n";
+            outs() << "unknown\n";
+            return;
+        }
 
         /**
          * Get the initial symbolic closed form as a conjunction

@@ -6,7 +6,7 @@ Satisfiability solver for constrained Horn clauses (CHC) based on <a href="https
 Setup
 =====
 
-FreqHorn itself is a native C++ project, but the phase-error workflow in `RndLearnerV5.hpp` also depends on the POLAR Python tool for closed-form generation. In this repository, both `tools/polar` and `pwa-horn-benchmarks` are tracked as Git submodules. A complete setup therefore has three pieces:
+FreqHorn itself is a native C++ project, but the phaserr algorithm also depends on the POLAR Python tool for closed-form generation. In this repository, both `tools/polar` and `pwa-horn-benchmarks` are tracked as Git submodules. A complete setup therefore has three pieces:
 
 1. system packages required to build FreqHorn,
 2. the POLAR repository and its Python environment,
@@ -71,9 +71,9 @@ Run `freqhorn --help` for usage information.
 POLAR Setup
 -----------
 
-The phase-error path expects the POLAR submodule to be present at `tools/polar` inside this repository.
+The phaserr flag requires the POLAR submodule to be present at `tools/polar` inside this repository.
 
-Then create and populate POLAR's virtual environment:
+To create and populate POLAR's virtual environment:
 
 * `cd tools/polar`
 * `python3 -m venv .venv`
@@ -95,7 +95,6 @@ This repository provides benchmark inputs and supporting data for comparing solv
 
 Typical Workflow
 ----------------
-
 For a user who wants the full setup, the expected sequence is:
 
 * clone this repository,
@@ -112,4 +111,3 @@ Benchmarks
 ==========
 
 Collection of the SMT-LIB2 translations of the satisfiable CHC system can be found at `bench_horn` and `bench_horn_multiple`. FreqHorn is expected to eventually discover solutions for the systems. On the other hand, there are several unsatisfiable CHC systems at `bench_horn_cex`, for which `freqhorn` is expected to diverge (but `expl` should find counterexamples).
-

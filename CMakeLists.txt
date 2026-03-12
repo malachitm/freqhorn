@@ -6,7 +6,7 @@ configure_file(
   "${CMAKE_CURRENT_BINARY_DIR}/include/deep/Config.hpp"
   @ONLY
 )
-#set(CMAKE_CXX_STANDARD 14)
+
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set (FreqHorn_VERSION_MAJOR 0)
 set (FreqHorn_VERSION_MINOR 5)

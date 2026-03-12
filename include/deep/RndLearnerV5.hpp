@@ -2705,9 +2705,16 @@ namespace ufo
                     {
                         if (ds.checkFact(i, annotations) == true)
                         {
-                            outs() << "Invariant found by index " << j << "\n";
-                            ds.learnedExprs[i].insert(newLemma);
-                            outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                            if (debug >= 1)
+                            {
+                                outs() << "Invariant found by index " << j << "\n";
+                                ds.learnedExprs[i].insert(newLemma);
+                                outs() << conjoin(ds.learnedExprs[i], m_efac) << "\n";
+                            }
+                            else
+                            {
+                                outs() << "Success!\n";
+                            }
                             exit(EXIT_SUCCESS);
                         }
                         else

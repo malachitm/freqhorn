@@ -86,6 +86,7 @@ int main(int argc, char **argv)
   const char *OPT_REC = "--re";
   const char *OPT_MBP = "--eqs-mbp";
   const char *OPT_SER = "--serialize";
+  const char *OPT_GET_ROOTS = "--get-roots";
   const char *OPT_DEBUG = "--debug";
 
   if (getBoolValue(OPT_HELP, false, argc, argv) || argc == 1)
@@ -114,6 +115,7 @@ int main(int argc, char **argv)
            << " " << OPT_ARITHM << "                   do not apply arithmetic constant propagation during parsing\n"
            << " " << OPT_TO << "                            timeout for each Z3 run in ms (default: 1000)\n"
            << " " << OPT_SER << "                     serialize the intermediate CHC representation to `chc.smt2` (and exit)\n"
+           << " " << OPT_GET_ROOTS << "                   output each symbolic root found in the closed forms (and exit)\n"
            << " " << OPT_DEBUG << " <LVL>                   print debugging information during run (default level: 0)\n\n"
            << "V1 options only:\n"
            << " " << OPT_ADD_EPSILON << "                           add small probabilities to features that never happen in the code\n"
@@ -183,6 +185,7 @@ int main(int argc, char **argv)
   bool d_g = !getBoolValue(OPT_D6, false, argc, argv);
   bool d_r = getBoolValue(OPT_REC, false, argc, argv);
   bool d_ser = getBoolValue(OPT_SER, false, argc, argv);
+  bool getRoots = getBoolValue(OPT_GET_ROOTS, false, argc, argv);
   int debug = getIntValue(OPT_DEBUG, 0, argc, argv);
 
   if (d_m || d_p || d_d || d_s)
@@ -211,7 +214,7 @@ int main(int argc, char **argv)
 
   if (vers5)
   {
-    learnInvariants5(string(argv[argc - 1]), to, do_elim, do_arithm, debug);
+    learnInvariants5(string(argv[argc - 1]), to, do_elim, do_arithm, getRoots, debug);
   }
 
   else if (vers4) // MBP-based, path-sensitive algorithms

@@ -2523,7 +2523,7 @@ namespace ufo
         }
     };
 
-    void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, int debug)
+    void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, bool getRoots, int debug)
     {
         ExprFactory m_efac;
         EZ3 z3(m_efac);
@@ -2568,6 +2568,16 @@ namespace ufo
          * Get the initial symbolic closed form as a conjunction
          */
         Expr symbolicClosedForms = ds.generateSymbolicClosedForms(i, closedformJson);
+
+        if (getRoots)
+        {
+            for (const auto &[numericStr, symbolicExpr] : ds.rootMaps[i])
+            {
+                outs() << symbolicExpr << " (base: " << numericStr << ")\n";
+            }
+            return;
+        }
+
         Expr index = ds.indices[i];
         Expr oneReal = mkTerm(mpq_class("1"), m_efac);
         Expr zeroReal = mkTerm(mpq_class("0"), m_efac);

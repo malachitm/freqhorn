@@ -111,3 +111,10 @@ Benchmarks
 ==========
 
 Collection of the SMT-LIB2 translations of the satisfiable CHC system can be found at `bench_horn` and `bench_horn_multiple`. FreqHorn is expected to eventually discover solutions for the systems. On the other hand, there are several unsatisfiable CHC systems at `bench_horn_cex`, for which `freqhorn` is expected to diverge (but `expl` should find counterexamples).
+
+Runthrough
+==========
+
+To run the benchmarks as described in Incremental Invariant Synthesis via Closed Forms, run the following command:
+
+`python3 run_benchmarks.py --folder ./benchmark_generator/b01/ --filter-csv satisfiable_benchmarks.csv `

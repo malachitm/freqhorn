@@ -88,6 +88,7 @@ int main(int argc, char **argv)
   const char *OPT_SER = "--serialize";
   const char *OPT_GET_ROOTS = "--get-roots";
   const char *OPT_DEBUG = "--debug";
+  const char *OPT_CERTIFICATE = "--certificate";
 
   if (getBoolValue(OPT_HELP, false, argc, argv) || argc == 1)
   {
@@ -187,6 +188,7 @@ int main(int argc, char **argv)
   bool d_ser = getBoolValue(OPT_SER, false, argc, argv);
   bool getRoots = getBoolValue(OPT_GET_ROOTS, false, argc, argv);
   int debug = getIntValue(OPT_DEBUG, 0, argc, argv);
+  char *certificatePath = getStrValue(OPT_CERTIFICATE, nullptr, argc, argv);
 
   if (d_m || d_p || d_d || d_s)
     do_disj = true;
@@ -214,7 +216,8 @@ int main(int argc, char **argv)
 
   if (vers5)
   {
-    learnInvariants5(string(argv[argc - 1]), to, do_elim, do_arithm, getRoots, debug);
+    learnInvariants5(string(argv[argc - 1]), to, do_elim, do_arithm, getRoots, debug,
+                     certificatePath ? std::string(certificatePath) : "./phaserr_certificate.smt2");
   }
 
   else if (vers4) // MBP-based, path-sensitive algorithms

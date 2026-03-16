@@ -4,6 +4,8 @@
 
 set -e
 
+POLAR_PYTHON_BIN="python3"
+
 
 # Detect OS and install system dependencies
 echo "Detecting operating system and installing system packages..."
@@ -12,12 +14,17 @@ if [ "$(uname)" = "Linux" ]; then
 	if [ -f /etc/debian_version ]; then
 		echo "Detected Debian/Ubuntu. Installing packages with apt-get..."
 		sudo apt-get update
-		sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3 gfortran pkg-config libopenblas-dev liblapack-dev python3-dev python3.12 python3.12-venv python3.12-dev
+		sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3 gfortran pkg-config libopenblas-dev liblapack-dev python3-dev
 
-		if ! command -v python3.12 >/dev/null 2>&1; then
-			echo "python3.12 was not found after installation attempt."
-			echo "Please enable the appropriate repository for your distro and install: python3.12 python3.12-venv python3.12-dev"
-			exit 1
+		if apt-cache show python3.12 >/dev/null 2>&1 && apt-cache show python3.12-venv >/dev/null 2>&1; then
+			echo "python3.12 packages are available; installing them for POLAR compatibility..."
+			sudo apt-get install -y python3.12 python3.12-venv python3.12-dev
+			if command -v python3.12 >/dev/null 2>&1; then
+				POLAR_PYTHON_BIN="python3.12"
+			fi
+		else
+			echo "python3.12 packages are not available in this repository (common on Debian trixie)."
+			echo "Falling back to system python3 for POLAR virtual environment setup."
 		fi
 	else
 		echo "Linux distribution not automatically supported. Please install dependencies manually."
@@ -37,10 +44,15 @@ elif [ "$(uname)" = "Darwin" ]; then
 		echo "Installing Xcode command line tools..."
 		xcode-select --install
 	fi
+	if command -v python3.12 >/dev/null 2>&1; then
+		POLAR_PYTHON_BIN="python3.12"
+	fi
 else
 	echo "Unsupported operating system: $(uname)"
 	exit 1
 fi
+
+echo "Using ${POLAR_PYTHON_BIN} for POLAR virtual environment."
 
 echo "Initializing git submodules..."
 git submodule update --init --recursive
@@ -48,14 +60,16 @@ git submodule update --init --recursive
 echo "Setting up POLAR Python environment..."
 if [ -d "tools/polar" ]; then
 	cd tools/polar
+	EXPECTED_PY_VERSION="$(${POLAR_PYTHON_BIN} -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 	if [ -d ".venv" ]; then
-		if ! .venv/bin/python3 -c "import sys; raise SystemExit(0 if (sys.version_info.major == 3 and sys.version_info.minor == 12) else 1)" >/dev/null 2>&1; then
-			echo "Existing tools/polar/.venv is not Python 3.12; recreating it..."
+		CURRENT_VENV_VERSION="$(.venv/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+		if [ "${CURRENT_VENV_VERSION}" != "${EXPECTED_PY_VERSION}" ]; then
+			echo "Existing tools/polar/.venv uses Python ${CURRENT_VENV_VERSION}; expected ${EXPECTED_PY_VERSION}. Recreating it..."
 			rm -rf .venv
 		fi
 	fi
 	if [ ! -d ".venv" ]; then
-		python3.12 -m venv .venv
+		${POLAR_PYTHON_BIN} -m venv .venv
 	fi
 	chmod +x closedforms2.py
 	source .venv/bin/activate

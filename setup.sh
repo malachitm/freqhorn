@@ -45,6 +45,7 @@ if [ -d "tools/polar" ]; then
 	if [ ! -d ".venv" ]; then
 		python3 -m venv .venv
 	fi
+	chmod +x closedforms2.py
 	source .venv/bin/activate
 	pip install --upgrade pip
 	if [ -f "requirements.txt" ]; then

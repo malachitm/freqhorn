@@ -1848,17 +1848,44 @@ namespace ufo
             std::copy_if(allVar.begin(), allVar.end(), std::back_inserter(bodyVar),
                          [&](Expr e)
                          { return contains(qr[i]->body, e); });
-            // Use absolute path instead of ~ to ensure proper expansion in popen/system
-            // const char *home = std::getenv("HOME");
-            // std::string call(home ? std::string(home) + "/tools/freqhorn/tools/polar/.venv/bin/python3 " : "");
-            // call += home ? std::string(home) + "/tools/freqhorn/tools/polar/closedforms2.py" : "~/tools/freqhorn/tools/polar/closedforms2.py";
+            auto shellQuote = [](const std::string &path)
+            {
+                std::string quoted = "'";
+                for (char ch : path)
+                {
+                    if (ch == '\'')
+                    {
+                        quoted += "'\\''";
+                    }
+                    else
+                    {
+                        quoted += ch;
+                    }
+                }
+                quoted += "'";
+                return quoted;
+            };
 
-            // std::string polarBase = std::string(FREQHORN_SOURCE_DIR) + "/tools/polar";
+            std::string polarBase = std::string(FREQHORN_SOURCE_DIR) + "/tools/polar";
+            std::string venvPython = polarBase + "/.venv/bin/python3";
+            std::string polarScript = polarBase + "/closedforms2.py";
 
-            // std::string call = polarBase + "/.venv/bin/python3 " + polarBase + "/closedforms2.py";
+            std::string pythonCmd;
+            if (std::ifstream(venvPython).good())
+            {
+                pythonCmd = venvPython;
+            }
+            else if (!std::string(POLAR_PYTHON_EXECUTABLE).empty())
+            {
+                pythonCmd = std::string(POLAR_PYTHON_EXECUTABLE);
+            }
+            else
+            {
+                pythonCmd = "python3";
+            }
 
-            std::string call = std::string(POLAR_PYTHON_EXECUTABLE) + " " + std::string(FREQHORN_SOURCE_DIR) + "/tools/polar/closedforms2.py";
-            call += " " + probFilePath;
+            std::string call = shellQuote(pythonCmd) + " " + shellQuote(polarScript);
+            call += " " + shellQuote(probFilePath);
             call += std::accumulate(bodyVar.begin(), bodyVar.end(), string(),
                                     [&](std::string &a, Expr b)
                                     { return a += " " + boost::algorithm::to_lower_copy(getVarName(b)); });

@@ -30,18 +30,29 @@
 #include <boost/range/combine.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <string>
 using namespace std;
 using namespace boost;
 
-std::string exec(const char *cmd)
+struct CommandResult
+{
+    std::string output;
+    int exitCode;
+    bool signaled;
+    int signalNumber;
+};
+
+CommandResult exec(const char *cmd)
 {
     char buffer[128];
+    std::string wrappedCmd = std::string(cmd) + " 2>&1";
     std::string result = "";
-    FILE *pipe = popen(cmd, "r");
+    FILE *pipe = popen(wrappedCmd.c_str(), "r");
     if (!pipe)
         throw std::runtime_error("popen() failed!");
+    int status = 0;
     try
     {
         while (fgets(buffer, sizeof buffer, pipe) != NULL)
@@ -54,8 +65,28 @@ std::string exec(const char *cmd)
         pclose(pipe);
         throw;
     }
-    pclose(pipe);
-    return result;
+    status = pclose(pipe);
+
+    CommandResult commandResult;
+    commandResult.output = result;
+    commandResult.exitCode = -1;
+    commandResult.signaled = false;
+    commandResult.signalNumber = 0;
+
+    if (status != -1)
+    {
+        if (WIFEXITED(status))
+        {
+            commandResult.exitCode = WEXITSTATUS(status);
+        }
+        if (WIFSIGNALED(status))
+        {
+            commandResult.signaled = true;
+            commandResult.signalNumber = WTERMSIG(status);
+        }
+    }
+
+    return commandResult;
 }
 
 std::vector<std::string> getAllSqrtWords(const std::string &input)
@@ -477,9 +508,16 @@ namespace ufo
                 }
                 return baseName;
             }
-            if (expr::isOpX<expr::op::PLUS>(e) && e->arity() == 2)
+            if (expr::isOpX<expr::op::PLUS>(e))
             {
-                return "(" + exprToPolarString(e->left(), varRenames) + " + " + exprToPolarString(e->right(), varRenames) + ")";
+                if (e->arity() == 0)
+                    return "0";
+                std::string out = exprToPolarString(e->arg(0), varRenames);
+                for (unsigned i = 1; i < e->arity(); ++i)
+                {
+                    out = "(" + out + " + " + exprToPolarString(e->arg(i), varRenames) + ")";
+                }
+                return out;
             }
             if (expr::isOpX<expr::op::MINUS>(e) && e->arity() == 2)
             {
@@ -493,11 +531,18 @@ namespace ufo
             {
                 return "(-" + exprToPolarString(e->left(), varRenames) + ")";
             }
-            if (expr::isOpX<expr::op::MULT>(e) && e->arity() == 2)
+            if (expr::isOpX<expr::op::MULT>(e))
             {
-                return "(" + exprToPolarString(e->left(), varRenames) + " * " + exprToPolarString(e->right(), varRenames) + ")";
+                if (e->arity() == 0)
+                    return "1";
+                std::string out = exprToPolarString(e->arg(0), varRenames);
+                for (unsigned i = 1; i < e->arity(); ++i)
+                {
+                    out = "(" + out + " * " + exprToPolarString(e->arg(i), varRenames) + ")";
+                }
+                return out;
             }
-            if (expr::isOpX<expr::op::DIV>(e) || expr::isOpX<expr::op::IDIV>(e) && e->arity() == 2)
+            if ((expr::isOpX<expr::op::DIV>(e) || expr::isOpX<expr::op::IDIV>(e)) && e->arity() == 2)
             {
                 return "(" + exprToPolarString(e->left(), varRenames) + " / " + exprToPolarString(e->right(), varRenames) + ")";
             }
@@ -2427,12 +2472,48 @@ namespace ufo
          * TODO: Use boost algorithm instead of this home-written
          * function
          */
-        std::string output_test = exec(ds.getCallToPolar(i).c_str());
+        std::string polarCommand = ds.getCallToPolar(i);
+        CommandResult polarResult = exec(polarCommand.c_str());
+        std::string output_test = polarResult.output;
+
+        if (polarResult.signaled || polarResult.exitCode != 0)
+        {
+            errs() << "Error: POLAR subprocess failed.\n";
+            errs() << "Command was: " << polarCommand << "\n";
+
+            if (polarResult.signaled)
+            {
+                errs() << "POLAR terminated by signal " << polarResult.signalNumber << ".\n";
+            }
+            else
+            {
+                errs() << "POLAR exited with code " << polarResult.exitCode << ".\n";
+            }
+
+            if (!output_test.empty())
+            {
+                errs() << "POLAR output was:\n"
+                       << output_test << "\n";
+            }
+
+            if (output_test.find("KeyboardInterrupt") != std::string::npos)
+            {
+                errs() << "Reason: POLAR was interrupted while solving the generated recurrence. This usually means the recurrence is too expensive for SymPy's root solver on this benchmark.\n";
+            }
+            else if (output_test.find("Traceback") != std::string::npos)
+            {
+                errs() << "Reason: POLAR raised a Python exception while analyzing the generated recurrence.\n";
+            }
+
+            outs() << "unknown\n";
+            return;
+        }
+
         if (output_test.empty())
         {
             errs() << "Error: POLAR subprocess returned no output.\n";
-            errs() << "Command was: " << ds.getCallToPolar(i) << "\n";
-            errs() << "Ensure Python venv exists and POLAR dependencies are installed.\n";
+            errs() << "Command was: " << polarCommand << "\n";
+            errs() << "POLAR exited successfully but did not emit JSON output.\n";
             outs() << "unknown\n";
             return;
         }
@@ -2444,6 +2525,7 @@ namespace ufo
         catch (const nlohmann::json::parse_error &e)
         {
             errs() << "Error: Failed to parse POLAR output as JSON.\n";
+            errs() << "Command was: " << polarCommand << "\n";
             errs() << "POLAR output was:\n"
                    << output_test << "\n";
             errs() << "JSON error: " << e.what() << "\n";

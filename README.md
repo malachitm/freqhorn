@@ -12,8 +12,11 @@ FreqHorn itself is a native C++ project, but the phaserr algorithm also depends 
 2. the POLAR repository and its Python environment,
 3. optionally, the PWA benchmark repository if benchmark analysis is needed.
 
+
+
 Prerequisites
 -------------
+
 
 FreqHorn is developed for Linux and also builds on macOS. Users should have:
 
@@ -24,17 +27,29 @@ FreqHorn is developed for Linux and also builds on macOS. Users should have:
 * Boost (including the system component),
 * Armadillo.
 
-On Debian/Ubuntu-like systems this typically means installing packages such as:
 
-* `build-essential`
-* `cmake`
-* `libgmp-dev`
-* `libgmpxx4ldbl`
-* `libboost-system-dev`
-* `libarmadillo-dev`
-* `python3`
-* `python3-venv`
-* `python3-pip`
+Quick Start: Install Prerequisite Packages
+-----------------------------------------
+
+**Ubuntu/Debian:**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip
+```
+
+**macOS (using Homebrew):**
+
+```bash
+brew update
+brew install cmake gmp boost armadillo python3
+```
+
+You may also need to install Xcode command line tools if you haven't already:
+
+```bash
+xcode-select --install
+```
 
 Repository Bootstrap
 --------------------

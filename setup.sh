@@ -4,10 +4,37 @@
 
 set -e
 
-# System dependencies (Debian/Ubuntu)
-echo "Installing system packages..."
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip
+
+# Detect OS and install system dependencies
+echo "Detecting operating system and installing system packages..."
+if [ "$(uname)" = "Linux" ]; then
+	# Check for Debian/Ubuntu
+	if [ -f /etc/debian_version ]; then
+		echo "Detected Debian/Ubuntu. Installing packages with apt-get..."
+		sudo apt-get update
+		sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip
+	else
+		echo "Linux distribution not automatically supported. Please install dependencies manually."
+		exit 1
+	fi
+elif [ "$(uname)" = "Darwin" ]; then
+	echo "Detected macOS. Installing packages with Homebrew..."
+	if ! command -v brew >/dev/null 2>&1; then
+		echo "Homebrew not found. Installing Homebrew..."
+		/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+		eval "$($(brew --prefix)/bin/brew shellenv)"
+	fi
+	brew update
+	brew install cmake gmp boost armadillo python3
+	# Recommend Xcode command line tools
+	if ! xcode-select -p >/dev/null 2>&1; then
+		echo "Installing Xcode command line tools..."
+		xcode-select --install
+	fi
+else
+	echo "Unsupported operating system: $(uname)"
+	exit 1
+fi
 
 echo "Initializing git submodules..."
 git submodule update --init --recursive

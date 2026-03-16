@@ -11,11 +11,14 @@ PY312_BIN="${PY312_PREFIX}/bin/python3.12"
 
 install_python312_from_source() {
 	echo "Installing Python ${PY312_VERSION} from python.org source..."
+	local ORIG_DIR="${PWD}"
+	local TMP_BUILD_DIR
 	TMP_BUILD_DIR="$(mktemp -d)"
-	PY_TARBALL="Python-${PY312_VERSION}.tgz"
-	PY_SRC_DIR="Python-${PY312_VERSION}"
+	local PY_TARBALL="Python-${PY312_VERSION}.tgz"
+	local PY_SRC_DIR="Python-${PY312_VERSION}"
 
 	cleanup() {
+		cd "${ORIG_DIR}"
 		rm -rf "${TMP_BUILD_DIR}"
 	}
 	trap cleanup EXIT

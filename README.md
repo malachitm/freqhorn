@@ -49,8 +49,10 @@ If you have an Ubuntu/Debian or macOS system, you can use the following commands
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3 gfortran pkg-config libopenblas-dev liblapack-dev python3-dev python3.12 python3.12-venv python3.12-dev
+sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3 gfortran pkg-config libopenblas-dev liblapack-dev python3-dev libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev liblzma-dev tk-dev uuid-dev curl wget xz-utils
 ```
+
+When you use `./setup.sh`, it will automatically install Python 3.12 for POLAR. If `python3.12` is not available from your package repository, the script downloads CPython 3.12 source from python.org and installs it under `~/.local/python-3.12`.
 
 **macOS (using Homebrew):**
 
@@ -100,7 +102,7 @@ POLAR Setup
 
 The phaserr flag requires the POLAR submodule to be present at `tools/polar` inside this repository.
 
-POLAR is best set up with **Python 3.12** for compatibility with the pinned requirements. On systems where Python 3.12 packages are not available (for example Debian trixie), `setup.sh` falls back to system Python and installs Python-3.13-compatible `numpy`/`scipy` versions.
+POLAR should be set up with **Python 3.12** for compatibility with the pinned requirements. The repository `setup.sh` enforces this automatically.
 
 To create and populate POLAR's virtual environment:
 
@@ -108,6 +110,10 @@ To create and populate POLAR's virtual environment:
 * `python3.12 -m venv .venv`
 * `source .venv/bin/activate`
 * `pip install -r requirements.txt`
+
+If `python3.12` is not on your `PATH` after running `setup.sh`, use:
+
+* `~/.local/python-3.12/bin/python3.12 -m venv .venv`
 
 After that, return to the FreqHorn root. The current `RndLearnerV5.hpp` workflow expects POLAR's interpreter at `tools/polar/.venv/bin/python3` and its script at `tools/polar/closedforms2.py`.
 

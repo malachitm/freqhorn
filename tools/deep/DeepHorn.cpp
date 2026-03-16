@@ -13,6 +13,23 @@ bool getBoolValue(const char *opt, bool defValue, int argc, char **argv)
   return defValue;
 }
 
+char *getOptionalStrValue(const char *opt, char *defValue, int argc, char **argv)
+{
+  for (int i = 1; i < argc; i++)
+  {
+    if (strcmp(argv[i], opt) == 0)
+    {
+      // Keep the final positional argument reserved for the input SMT2 file.
+      if (i + 1 < argc - 1 && strncmp(argv[i + 1], "--", 2) != 0)
+      {
+        return argv[i + 1];
+      }
+      return defValue;
+    }
+  }
+  return nullptr;
+}
+
 char *getStrValue(const char *opt, char *defValue, int argc, char **argv)
 {
   for (int i = 1; i < argc - 1; i++)
@@ -117,7 +134,17 @@ int main(int argc, char **argv)
            << " " << OPT_TO << "                            timeout for each Z3 run in ms (default: 1000)\n"
            << " " << OPT_SER << "                     serialize the intermediate CHC representation to `chc.smt2` (and exit)\n"
            << " " << OPT_GET_ROOTS << "                   output each symbolic root found in the closed forms (and exit)\n"
+           << " " << OPT_CERTIFICATE << " [FILE]          emit an SMT-LIB2 certificate for --phaserr runs"
+                                        " (default file: ./phaserr_certificate.smt2)\n"
            << " " << OPT_DEBUG << " <LVL>                   print debugging information during run (default level: 0)\n\n"
+           << "Phaserr mode (" << OPT_V5 << "):\n"
+           << " " << OPT_V5 << " <file.smt2>               run the affine-system closed-form learner\n"
+           << " Applicable flags: " << OPT_TO << ", " << OPT_ELIM << ", " << OPT_ARITHM << ", "
+           << OPT_GET_ROOTS << ", " << OPT_CERTIFICATE << ", " << OPT_DEBUG << "\n"
+           << " Examples:\n"
+           << "  freqhorn " << OPT_V5 << " input.smt2\n"
+           << "  freqhorn " << OPT_V5 << " " << OPT_CERTIFICATE << " input.smt2\n"
+           << "  freqhorn " << OPT_V5 << " " << OPT_CERTIFICATE << " cert.smt2 " << OPT_GET_ROOTS << " input.smt2\n\n"
            << "V1 options only:\n"
            << " " << OPT_ADD_EPSILON << "                           add small probabilities to features that never happen in the code\n"
            << " " << OPT_K_IND << "                          run k-induction after each learned lemma\n\n"
@@ -188,7 +215,7 @@ int main(int argc, char **argv)
   bool d_ser = getBoolValue(OPT_SER, false, argc, argv);
   bool getRoots = getBoolValue(OPT_GET_ROOTS, false, argc, argv);
   int debug = getIntValue(OPT_DEBUG, 0, argc, argv);
-  char *certificatePath = getStrValue(OPT_CERTIFICATE, nullptr, argc, argv);
+  char *certificatePath = getOptionalStrValue(OPT_CERTIFICATE, (char *)"./phaserr_certificate.smt2", argc, argv);
 
   if (d_m || d_p || d_d || d_s)
     do_disj = true;
@@ -217,7 +244,7 @@ int main(int argc, char **argv)
   if (vers5)
   {
     learnInvariants5(string(argv[argc - 1]), to, do_elim, do_arithm, getRoots, debug,
-                     certificatePath ? std::string(certificatePath) : "./phaserr_certificate.smt2");
+                     certificatePath ? std::string(certificatePath) : "");
   }
 
   else if (vers4) // MBP-based, path-sensitive algorithms

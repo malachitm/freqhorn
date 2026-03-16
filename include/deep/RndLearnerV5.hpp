@@ -2368,38 +2368,6 @@ namespace ufo
             return replaceAll(expr, replacements);
         }
 
-        /// Recursively convert every MPZ (integer) leaf in \p e to an
-        /// equivalent MPQ (rational) leaf.  This ensures that expressions
-        /// round-tripped through Z3's parser are marshalled back to Z3
-        /// with Real sort, avoiding the problem where bare integer
-        /// literals like 9 get printed as "9" instead of "(/ 9 1)".
-        Expr mpzToMpq(Expr e)
-        {
-            if (!e)
-                return e;
-            if (isOpX<MPZ>(e))
-            {
-                mpz_class z = getTerm<mpz_class>(e);
-                return mkTerm(mpq_class(z), m_efac);
-            }
-            // Recurse into children
-            bool changed = false;
-            std::vector<Expr> kids(e->arity());
-            for (unsigned i = 0; i < e->arity(); ++i)
-            {
-                kids[i] = mpzToMpq(e->arg(i));
-                if (kids[i] != e->arg(i))
-                    changed = true;
-            }
-            if (!changed)
-                return e;
-            if (kids.size() == 0)
-                return e;
-            if (kids.size() == 1)
-                return e->getFactory().mkNary(e->op(), kids.begin(), kids.end());
-            return e->getFactory().mkNary(e->op(), kids.begin(), kids.end());
-        }
-
         // Only works for expressions that are either numeric
         // constants or include "_i_0"
         Expr str_to_expr(std::string exprString, std::vector<std::string> sqrts = std::vector<std::string>(), int i = 0)

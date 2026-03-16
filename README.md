@@ -100,7 +100,7 @@ POLAR Setup
 
 The phaserr flag requires the POLAR submodule to be present at `tools/polar` inside this repository.
 
-POLAR should be set up with **Python 3.12** to avoid SciPy compatibility/build issues seen with newer interpreters (e.g., Python 3.13).
+POLAR is best set up with **Python 3.12** for compatibility with the pinned requirements. On systems where Python 3.12 packages are not available (for example Debian trixie), `setup.sh` falls back to system Python and installs Python-3.13-compatible `numpy`/`scipy` versions.
 
 To create and populate POLAR's virtual environment:
 

@@ -75,7 +75,18 @@ if [ -d "tools/polar" ]; then
 	source .venv/bin/activate
 	pip install --upgrade pip
 	if [ -f "requirements.txt" ]; then
-		pip install -r requirements.txt
+		VENV_PY_VERSION="$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+		if [ "${VENV_PY_VERSION}" = "3.13" ]; then
+			echo "Detected Python 3.13 in POLAR virtualenv."
+			echo "Installing requirements with Python-3.13-compatible scipy/numpy versions..."
+			TMP_REQ_FILE="$(mktemp)"
+			grep -Ev '^(scipy|numpy)==|^(scipy|numpy)~=' requirements.txt > "${TMP_REQ_FILE}"
+			pip install -r "${TMP_REQ_FILE}"
+			rm -f "${TMP_REQ_FILE}"
+			pip install "numpy>=2.1,<2.3" "scipy>=1.14,<1.16"
+		else
+			pip install -r requirements.txt
+		fi
 	fi
 	deactivate
 	cd - > /dev/null

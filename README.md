@@ -46,7 +46,6 @@ Clone the repository and initialize its submodules:
 * `git submodule update --init --recursive`
 
 This populates:
-
 * `tools/polar` from `https://github.com/malachitm/polar.git`
 * `pwa-horn-benchmarks` from `https://github.com/malachitm/pwa-horn-benchmarks.git`
 
@@ -54,7 +53,6 @@ If the repository was cloned earlier without submodules, running `git submodule 
 
 FreqHorn Build
 --------------
-
 From the repository root:
 
 * `mkdir -p build`
@@ -106,11 +104,6 @@ For a user who wants the full setup, the expected sequence is:
 FreqHorn does not automatically find counterexamples (unless the CHC system can be trivially simplified), but its supplementary tool `expl` tool does. We recommend running `freqhorn` and `expl` concurrently.
 
 The tools print `Success ...` if the system is satisfiable.
-
-Benchmarks
-==========
-
-Collection of the SMT-LIB2 translations of the satisfiable CHC system can be found at `bench_horn` and `bench_horn_multiple`. FreqHorn is expected to eventually discover solutions for the systems. On the other hand, there are several unsatisfiable CHC systems at `bench_horn_cex`, for which `freqhorn` is expected to diverge (but `expl` should find counterexamples).
 
 Runthrough
 ==========

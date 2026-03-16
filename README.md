@@ -49,7 +49,7 @@ If you have an Ubuntu/Debian or macOS system, you can use the following commands
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip gettext python-is-python3
+sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3 gfortran pkg-config libopenblas-dev liblapack-dev python3-dev python3.12 python3.12-venv python3.12-dev
 ```
 
 **macOS (using Homebrew):**
@@ -100,10 +100,12 @@ POLAR Setup
 
 The phaserr flag requires the POLAR submodule to be present at `tools/polar` inside this repository.
 
+POLAR should be set up with **Python 3.12** to avoid SciPy compatibility/build issues seen with newer interpreters (e.g., Python 3.13).
+
 To create and populate POLAR's virtual environment:
 
 * `cd tools/polar`
-* `python3 -m venv .venv`
+* `python3.12 -m venv .venv`
 * `source .venv/bin/activate`
 * `pip install -r requirements.txt`
 

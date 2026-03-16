@@ -4,19 +4,34 @@ FreqHorn
 Satisfiability solver for constrained Horn clauses (CHC) based on <a href="https://github.com/Z3Prover/z3">Z3</a> SMT solver. It combines syntax-guided methods to inductive invariant synthesis with data learning and quantified reasoning over arrays. Find more details at <a href="http://www.cs.fsu.edu/~grigory/freqhorn-arrays.pdf">CAV'19</a> and <a href="http://www.cs.fsu.edu/~grigory/multi-freqhorn.pdf">FMCAD'18</a> papers.
 
 Setup
-=====
+------
 
 FreqHorn itself is a native C++ project, but the phaserr algorithm also depends on the POLAR Python tool for closed-form generation. In this repository, both `tools/polar` and `pwa-horn-benchmarks` are tracked as Git submodules. A complete setup therefore has three pieces:
 
-1. system packages required to build FreqHorn,
+1. System packages required to build FreqHorn,
 2. the POLAR repository and its Python environment,
 3. optionally, the PWA benchmark repository if benchmark analysis is needed.
 
-
-
-Prerequisites
+Quick Startup
 -------------
 
+The following set of instructions should be sufficient for setting up the system for Ubuntu/Debian and macOS operating systems.
+
+```bash
+git clone https://github.com/malachitm/freqhorn.git
+cd freqhorn
+./setup.sh
+mkdir -p build
+cd build
+cmake ..
+make
+make
+```
+
+If this does not work, continue to the following instructions.
+
+Preliminary
+-----
 
 FreqHorn is developed for Linux and also builds on macOS. Users should have:
 
@@ -27,15 +42,14 @@ FreqHorn is developed for Linux and also builds on macOS. Users should have:
 * Boost (including the system component),
 * Armadillo.
 
-
-Quick Start: Install Prerequisite Packages
+If you have an Ubuntu/Debian or macOS system, you can use the following commands to install these dependencies.
 -----------------------------------------
 
 **Ubuntu/Debian:**
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip
+sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip gettext python-is-python3
 ```
 
 **macOS (using Homebrew):**

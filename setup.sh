@@ -12,7 +12,7 @@ if [ "$(uname)" = "Linux" ]; then
 	if [ -f /etc/debian_version ]; then
 		echo "Detected Debian/Ubuntu. Installing packages with apt-get..."
 		sudo apt-get update
-		sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip
+		sudo apt-get install -y build-essential cmake libgmp-dev libgmpxx4ldbl libboost-system-dev libarmadillo-dev python3 python3-venv python3-pip python3-setuptools gettext python-is-python3
 	else
 		echo "Linux distribution not automatically supported. Please install dependencies manually."
 		exit 1

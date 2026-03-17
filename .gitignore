@@ -1,3 +1,4 @@
+*.prob
 /build/
 /GPATH
 /GRTAGS

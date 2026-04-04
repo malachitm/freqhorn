@@ -179,6 +179,10 @@ namespace ufo
         // vector<bool> hasNonlinearity; // helps determine which solver to use
         bool hasNonlinearity = false; // by default
         std::vector<std::vector<std::string>> polarVarNames;
+        std::vector<std::vector<std::string>> initVarNames;
+        map<int, std::vector<std::pair<std::string, std::string>>> pendingInitVarPairs;
+        map<int, std::map<std::string, std::string>> initVarNameMap;
+        map<int, ExprVector> initVars;
 
         /// Persistent QF_NRA solver, lazily initialized on first use.
         /// Kept as std::optional because ZSolver has no default ctor.
@@ -203,9 +207,254 @@ namespace ufo
 
         Expr generateInitCond(int i)
         {
+            // Looking at this code more, I am starting to understand what the issue is.
+            // I need to look at the initial and check whether
+            // 1) there is an initial variable that was created for that variable.
+            // 2) we assume that we can't have singleton variables mix with non-singleton variables
+
+            // Then, all you need to do is say "does it include some initial variable
+            // and it ISN'T one of those equalities? If so, set those aside and remove them from
+            // the other set.
+
+            // get the initial body of the Fact, and create the cond (0 <= i < 1)
+            outs() << "Here should be all the auxiliary variables\n";
+            ExprSet auxiliaryVars;
+            for (const auto &v : symbolicRoots[i])
+            {
+                auxiliaryVars.insert(v);
+            }
+            auxiliaryVars.insert(indices[i]);
+            for (const auto &v : initVars[i])
+            {
+                auxiliaryVars.insert(v);
+            }
+
             Expr init = getInitBody(i);
             Expr conds = mk<AND>(mk<LEQ>(zeroReal, indices[i]), mk<LT>(indices[i], oneReal));
-            return mk<IMPL>(conds, init);
+
+            ExprSet initConjuncts;
+            getConj(init, initConjuncts);
+
+            std::map<Expr, Expr> substitutions;
+            std::set<std::string> initNames;
+            ExprSet varWithInit;
+            ExprSet varWithoutInit;
+
+            // update substitutions and initNames to have
+            // 1) a mapping from the original variable to it's initial variable
+            // 2) a set of variables (should they be lower case or stay the same?) that are initial.
+
+            for (const auto &entry : initVarNameMap[i])
+            {
+                const std::string &baseName = entry.first;
+                const std::string &initName = entry.second;
+                outs() << "Base: " << baseName << "\tInit: " << initName << "\n";
+            }
+
+            for (const auto &v : invarVarsShort[i])
+            {
+                outs() << "Variables: " << v << "\n";
+            }
+
+            if (initVarNameMap.count(i) > 0)
+            {
+                for (const auto &v : invarVarsShort[i])
+                {
+                    if (auxiliaryVars.count(v) > 0)
+                    {
+                        continue;
+                    }
+                    std::string lowerInitVar = getVarName(v);
+                    outs() << lowerInitVar << "\n";
+
+                    if (initVarNameMap[i].count(lowerInitVar) == 0)
+                    {
+                        outs() << "Variable without an initial variable: " << v << "\n";
+                        varWithoutInit.insert(v);
+                    }
+                    /*
+                    else
+                    {
+                        Expr varInit = bind::realConst(mkTerm<std::string>(initVarNameMap[i][lowerInitVar], m_efac));
+                        substitutions[v] = varInit;
+                    }
+                        */
+                }
+
+                for (const auto &entry : initVarNameMap[i])
+                {
+                    const std::string &baseName = entry.first;
+                    const std::string &initName = entry.second;
+                    initNames.insert(boost::algorithm::to_lower_copy(initName));
+                    Expr varOrig = bind::realConst(mkTerm<std::string>(baseName, m_efac));
+                    Expr varInit = bind::realConst(mkTerm<std::string>(initName, m_efac));
+                    substitutions[varOrig] = varInit;
+                    varWithInit.insert(varOrig);
+                }
+
+                for (const auto &v : invVars[i])
+                {
+                    if (varWithInit.count(v) == 0)
+                    {
+                        varWithoutInit.insert(v);
+                    }
+                }
+            }
+
+            // checks whether a variable is an initial variable.
+            auto isInitVarByName = [&](const Expr &v) -> bool
+            {
+                std::string name = getVarName(v);
+                return initNames.count(name) > 0;
+            };
+
+            auto containsAny = [&](expr::Expr e, const expr::ExprSet &needles) -> bool
+            {
+                for (const auto &n : needles)
+                    if (contains(e, n))
+                        return true;
+                return false;
+            };
+
+            ExprSet rewrittenConjs;
+            ExprSet originalConjs;
+
+            for (const auto &c : initConjuncts)
+            {
+                // bool condConj = false;
+
+                // Finds all the equalities that are unnecessary for this work.
+                /*
+                if (isOpX<EQ>(c) && c->arity() == 2)
+                {
+                    Expr l = c->left();
+                    Expr r = c->right();
+
+                    bool lIsInit = isInitVarByName(l);
+                    bool rIsInit = isInitVarByName(r);
+                    bool lIsBase = substitutions.count(l) > 0;
+                    bool rIsBase = substitutions.count(r) > 0;
+
+                    // Drop equalities that only link a base variable to its init variable.
+                    if ((lIsBase && rIsInit) || (lIsInit && rIsBase) || (lIsBase && rIsBase))
+                    {
+                        condConj = true;
+                    }
+                }
+                else if (containsAny(c, varWithoutInit))
+                {
+                    condConj = true;
+                }
+                */
+                if (containsAny(c, auxiliaryVars) || containsAny(c, varWithoutInit))
+                {
+                    originalConjs.insert(c);
+                }
+                else
+                {
+                    rewrittenConjs.insert(replaceAll(c, substitutions));
+                }
+            }
+
+            Expr rewrittenBody = rewrittenConjs.empty() ? mk<TRUE>(m_efac) : conjoin(rewrittenConjs, m_efac);
+            Expr originalBody = originalConjs.empty() ? mk<TRUE>(m_efac) : conjoin(originalConjs, m_efac);
+            Expr conditional = mk<IMPL>(conds, originalBody);
+            Expr test = mk<AND>(conditional, rewrittenBody);
+            outs() << test << "\n";
+            return test;
+        }
+
+        Expr registerInitRealVar(int invIdx, const std::string &varName, const std::string &initName)
+        {
+            assert(invIdx < invNumber);
+            Expr initVar = bind::realConst(mkTerm<std::string>(initName, m_efac));
+            ExprVector &bucket = initVars[invIdx];
+            auto exists = std::find_if(bucket.begin(), bucket.end(),
+                                       [&](const Expr &e)
+                                       { return getVarName(e) == initName; });
+            if (exists != bucket.end())
+            {
+                return *exists;
+            }
+
+            bucket.push_back(initVar);
+
+            Expr initVarPrime = bind::realConst(mkTerm<std::string>(initName + "'", m_efac));
+            Expr baseVar = bind::realConst(mkTerm<std::string>(varName, m_efac));
+            Expr baseVarPrime = bind::realConst(mkTerm<std::string>(varName + "'", m_efac));
+
+            // Keep substitution vectors aligned with CHC src/dst var vectors.
+            invarVarsShort[invIdx].push_back(initVar);
+
+            // Register on the relation declaration used by this invariant.
+            Expr rel = decls[invIdx];
+            bool alreadyInRM = false;
+            for (const auto &v : ruleManager.invVars[rel])
+            {
+                if (v == initVar)
+                {
+                    alreadyInRM = true;
+                    break;
+                }
+            }
+            if (!alreadyInRM)
+            {
+                ExprVector updatedVars = ruleManager.invVars[rel];
+                updatedVars.push_back(initVar);
+                ruleManager.invVars[rel].clear();
+                ruleManager.invVarsPrime[rel].push_back(initVarPrime);
+                ruleManager.addDeclAndVars(rel, updatedVars);
+            }
+
+            for (auto &hr : ruleManager.chcs)
+            {
+                int srcNum = getVarIndex(hr.srcRelation, decls);
+                int dstNum = getVarIndex(hr.dstRelation, decls);
+
+                if (hr.isFact && dstNum == invIdx)
+                {
+                    hr.dstVars.push_back(initVarPrime);
+
+                    // Requested fact constraint: v = v_INIT.
+                    // In fact bodies we use primed variables, so add v' = v_INIT'.
+                    ExprSet bodyConj;
+                    getConj(hr.body, bodyConj);
+                    bodyConj.insert(mk<EQ>(baseVarPrime, initVarPrime));
+                    hr.body = conjoin(bodyConj, m_efac);
+                }
+
+                if (hr.isInductive || (!hr.isFact && !hr.isQuery))
+                {
+                    hr.srcVars.push_back(initVar);
+                    hr.dstVars.push_back(initVarPrime);
+
+                    // Initial-value variables are constants across transitions.
+                    ExprSet bodyConj;
+                    getConj(hr.body, bodyConj);
+                    bodyConj.insert(mk<EQ>(initVarPrime, initVar));
+                    hr.body = conjoin(bodyConj, m_efac);
+                }
+
+                if (hr.isQuery && srcNum == invIdx)
+                {
+                    hr.srcVars.push_back(initVar);
+                }
+            }
+
+            updateCategorizationOfCHCs(invIdx);
+            return initVar;
+        }
+
+        void materializeInitRealVars(int invIdx)
+        {
+            if (pendingInitVarPairs.count(invIdx) == 0)
+                return;
+
+            for (const auto &p : pendingInitVarPairs[invIdx])
+            {
+                registerInitRealVar(invIdx, p.first, p.second);
+            }
+            pendingInitVarPairs[invIdx].clear();
         }
 
         /**
@@ -809,6 +1058,13 @@ namespace ufo
             std::ostringstream polarProgram;
             std::vector<std::string> initLhsVars, initRhsVals;
             std::map<std::string, std::string> initialValueMap; // var_name -> value_string
+            if (initVarNames.size() <= static_cast<size_t>(myinv))
+            {
+                initVarNames.resize(myinv + 1);
+            }
+            initVarNames[myinv].clear();
+            pendingInitVarPairs[myinv].clear();
+            std::set<std::string> seenInitVars;
 
             // 1. Process Fact CHC for initial values
             // Use canonical variable names from invVars for the relation
@@ -879,7 +1135,14 @@ namespace ufo
                 // value a bounds inside of the invariant we create.
                 if (!foundAssignment)
                 {
-                    initialValueMap[varName] = varName + "_INIT";
+                    std::string initName = varName + "_INIT";
+                    initialValueMap[varName] = initName;
+                    initVarNameMap[myinv][varName] = initName;
+                    if (seenInitVars.insert(initName).second)
+                    {
+                        initVarNames[myinv].push_back(initName);
+                        pendingInitVarPairs[myinv].push_back({varName, initName});
+                    }
                 }
             }
 
@@ -2309,10 +2572,23 @@ namespace ufo
             if (vars.empty())
                 return expr;
 
+            std::set<std::string> allowedInitVars;
+            if (invIdx >= 0 && invIdx < initVarNames.size())
+            {
+                for (const auto &nm : initVarNames[invIdx])
+                    allowedInitVars.insert(boost::algorithm::to_lower_copy(nm));
+            }
+            else if (!initVarNames.empty())
+            {
+                for (const auto &nm : initVarNames[0])
+                    allowedInitVars.insert(boost::algorithm::to_lower_copy(nm));
+            }
+
             ExprMap replacements;
             for (const Expr &var : vars)
             {
                 std::string vname = getVarName(var);
+                std::string vnameLower = boost::algorithm::to_lower_copy(vname);
                 if (vname == "n" || vname == "_x")
                 {
                     replacements[var] = indexVar;
@@ -2322,6 +2598,12 @@ namespace ufo
                     // Look up the matching sqrt Expr in invarVarsShort
                     Expr sqrtExpr = bind::realConst(mkTerm<std::string>(vname, m_efac));
                     replacements[var] = sqrtExpr;
+                }
+                else if (allowedInitVars.count(vnameLower) > 0)
+                {
+                    // POLAR may emit init vars in lowercase; normalize to uppercase.
+                    std::string normalizedInit = boost::algorithm::to_upper_copy(vname);
+                    replacements[var] = bind::realConst(mkTerm<std::string>(normalizedInit, m_efac));
                 }
                 else
                 {
@@ -2368,15 +2650,69 @@ namespace ufo
             return replaceAll(expr, replacements);
         }
 
+        std::vector<std::string> getAllInitVars(std::string s)
+        {
+            std::vector<std::string> res;
+
+            // This implementation currently targets a single CHC set.
+            // By convention, the tracked init vars are stored at index 0.
+            if (initVarNames.empty() || initVarNames[0].empty())
+            {
+                return res;
+            }
+
+            std::set<std::string> allowed;
+            for (const auto &name : initVarNames[0])
+            {
+                allowed.insert(boost::algorithm::to_lower_copy(name));
+            }
+
+            auto isIdentChar = [](char c)
+            {
+                return (c >= 'a' && c <= 'z') ||
+                       (c >= 'A' && c <= 'Z') ||
+                       (c >= '0' && c <= '9') ||
+                       c == '_' || c == '\'';
+            };
+
+            std::set<std::string> seen;
+            size_t i = 0;
+            while (i < s.size())
+            {
+                while (i < s.size() && !isIdentChar(s[i]))
+                    ++i;
+                if (i >= s.size())
+                    break;
+
+                size_t start = i;
+                while (i < s.size() && isIdentChar(s[i]))
+                    ++i;
+
+                std::string tok = s.substr(start, i - start);
+                if (allowed.count(boost::algorithm::to_lower_copy(tok)) && seen.insert(tok).second)
+                {
+                    res.push_back(tok);
+                }
+            }
+
+            return res;
+        }
+
         // Only works for expressions that are either numeric
         // constants or include "_i_0"
-        Expr str_to_expr(std::string exprString, std::vector<std::string> sqrts = std::vector<std::string>(), int i = 0)
+        Expr str_to_expr(std::string exprString, std::vector<std::string> sqrts = std::vector<std::string>(), int i = 0, std::vector<std::string> inits = std::vector<std::string>())
         {
 
             if (sqrts.size() == 0)
             {
                 auto sqrtNums = getAllSqrtWords(exprString);
                 sqrts = sqrtNums;
+            }
+
+            if (inits.size() == 0)
+            {
+                auto initVars = getAllInitVars(exprString);
+                inits = initVars;
             }
 
             std::string outfile;
@@ -2386,6 +2722,10 @@ namespace ufo
             for (auto s : sqrts)
             {
                 outfile += "(declare-const sqrt" + s + " Real)\n";
+            }
+            for (auto initVar : inits)
+            {
+                outfile += "(declare-const " + initVar + " Real)\n";
             }
             outfile += "(assert (= _x " + exprString + "))\n";
             outfile += "(check-sat)\n";
@@ -2525,6 +2865,14 @@ namespace ufo
             Expr test = replaceAll(fc[i]->body, mappings);
             return test;
         }
+
+        void printStatistics(void)
+        {
+            outs() << "Statistics\n";
+            outs() << "# Phase Lemmas Generated: " << "\n";
+            outs() << "Median Runtime per Phase Lemma Generated" << "\n";
+            outs() << "Mean Runtime per Phase Lemma Generated" << "\n";
+        }
     };
 
     void learnInvariants5(std::string smt, unsigned to, bool doElim, bool doArithm, bool getRoots, int debug,
@@ -2563,6 +2911,7 @@ namespace ufo
 
         ds.probFilePath = std::string(FREQHORN_SOURCE_DIR) + "/out.prob";
         ds.generatePolarFile2(ruleManager, ds.probFilePath);
+        ds.materializeInitRealVars(i);
         /**
          * TODO: Use boost algorithm instead of this home-written
          * function
@@ -2816,6 +3165,12 @@ namespace ufo
         ds.symbolicRoots[i] = symbolsToKeep;
         Expr itr = zeroReal;
         map<int, ExprVector> verifiedLemmas;
+
+        std::vector<std::chrono::duration<double>> synthTime;
+        synthTime.reserve(max_iterations * 2);
+        std::vector<std::size_t> attemptCount;
+        attemptCount.reserve(max_iterations * 2);
+        std::size_t count = 0;
         for (size_t j = 1; j < max_iterations; j++)
         {
             itr = ds.mpzToMpq(simplifyArithm(mk<PLUS>(itr, oneReal)));
@@ -2826,6 +3181,7 @@ namespace ufo
                 boost::tie(n, s) = tuple;
 
                 // --- Upper bound ---
+                auto begin{std::chrono::steady_clock::now()};
                 Expr upperBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
                 Expr cond = phaseCond[s].max(itr);
                 Expr bnd = mk<LEQ>(s, upperBound);
@@ -2835,6 +3191,7 @@ namespace ufo
                     boost::tribool consResult = ds.checkConsecution(i, annotations);
                     if (!(consResult == true))
                     {
+                        count++;
                         hasDeviated.insert(s);
                         do
                         {
@@ -2846,10 +3203,16 @@ namespace ufo
                         } while (!(consResult == true));
                     }
                 }
-
                 Expr upperLemma = newLemma;
                 previousUpper[s] = upperBound;
+                auto end{std::chrono::steady_clock::now()};
+                std::chrono::duration<double> elapsed_seconds{begin - end};
+                synthTime.push_back(elapsed_seconds);
+                attemptCount.push_back(count);
+                count = 0;
 
+                // lower-bound
+                begin = std::chrono::steady_clock::now();
                 Expr lowerBound;
                 if (hasDeviated.count(s) > 0)
                 {
@@ -2868,6 +3231,7 @@ namespace ufo
                     boost::tribool consResult = ds.checkConsecution(i, annotations);
                     if (!consResult == true)
                     {
+                        count++;
                         hasDeviated.insert(s);
                         do
                         {
@@ -2879,6 +3243,12 @@ namespace ufo
                         } while (!(consResult == true));
                     }
                 }
+
+                end = std::chrono::steady_clock::now();
+                elapsed_seconds = begin - end;
+                synthTime.push_back(elapsed_seconds);
+                attemptCount.push_back(count);
+                count = 0;
 
                 // Check safety
                 {

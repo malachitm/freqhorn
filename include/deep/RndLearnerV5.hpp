@@ -207,17 +207,7 @@ namespace ufo
 
         Expr generateInitCond(int i)
         {
-            // Looking at this code more, I am starting to understand what the issue is.
-            // I need to look at the initial and check whether
-            // 1) there is an initial variable that was created for that variable.
-            // 2) we assume that we can't have singleton variables mix with non-singleton variables
-
-            // Then, all you need to do is say "does it include some initial variable
-            // and it ISN'T one of those equalities? If so, set those aside and remove them from
-            // the other set.
-
-            // get the initial body of the Fact, and create the cond (0 <= i < 1)
-            outs() << "Here should be all the auxiliary variables\n";
+            // store all auxiliary variables in one set
             ExprSet auxiliaryVars;
             for (const auto &v : symbolicRoots[i])
             {
@@ -229,33 +219,18 @@ namespace ufo
                 auxiliaryVars.insert(v);
             }
 
+            // get the initial body and the cond
             Expr init = getInitBody(i);
             Expr conds = mk<AND>(mk<LEQ>(zeroReal, indices[i]), mk<LT>(indices[i], oneReal));
-
             ExprSet initConjuncts;
             getConj(init, initConjuncts);
 
+            // store all variables that aren't auxiliary and don't have
+            // a respective initial variable in varWithoutInit and
+            // store the mapping between a variable and it's initial variable
+            // in substitutions
             std::map<Expr, Expr> substitutions;
-            std::set<std::string> initNames;
-            ExprSet varWithInit;
             ExprSet varWithoutInit;
-
-            // update substitutions and initNames to have
-            // 1) a mapping from the original variable to it's initial variable
-            // 2) a set of variables (should they be lower case or stay the same?) that are initial.
-
-            for (const auto &entry : initVarNameMap[i])
-            {
-                const std::string &baseName = entry.first;
-                const std::string &initName = entry.second;
-                outs() << "Base: " << baseName << "\tInit: " << initName << "\n";
-            }
-
-            for (const auto &v : invarVarsShort[i])
-            {
-                outs() << "Variables: " << v << "\n";
-            }
-
             if (initVarNameMap.count(i) > 0)
             {
                 for (const auto &v : invarVarsShort[i])
@@ -265,49 +240,19 @@ namespace ufo
                         continue;
                     }
                     std::string lowerInitVar = getVarName(v);
-                    outs() << lowerInitVar << "\n";
-
                     if (initVarNameMap[i].count(lowerInitVar) == 0)
                     {
-                        outs() << "Variable without an initial variable: " << v << "\n";
                         varWithoutInit.insert(v);
                     }
-                    /*
                     else
                     {
                         Expr varInit = bind::realConst(mkTerm<std::string>(initVarNameMap[i][lowerInitVar], m_efac));
                         substitutions[v] = varInit;
                     }
-                        */
-                }
-
-                for (const auto &entry : initVarNameMap[i])
-                {
-                    const std::string &baseName = entry.first;
-                    const std::string &initName = entry.second;
-                    initNames.insert(boost::algorithm::to_lower_copy(initName));
-                    Expr varOrig = bind::realConst(mkTerm<std::string>(baseName, m_efac));
-                    Expr varInit = bind::realConst(mkTerm<std::string>(initName, m_efac));
-                    substitutions[varOrig] = varInit;
-                    varWithInit.insert(varOrig);
-                }
-
-                for (const auto &v : invVars[i])
-                {
-                    if (varWithInit.count(v) == 0)
-                    {
-                        varWithoutInit.insert(v);
-                    }
                 }
             }
 
-            // checks whether a variable is an initial variable.
-            auto isInitVarByName = [&](const Expr &v) -> bool
-            {
-                std::string name = getVarName(v);
-                return initNames.count(name) > 0;
-            };
-
+            // helper function
             auto containsAny = [&](expr::Expr e, const expr::ExprSet &needles) -> bool
             {
                 for (const auto &n : needles)
@@ -316,36 +261,14 @@ namespace ufo
                 return false;
             };
 
+            // if a conjunct includes auxiliary variables, or variables that don't have
+            // respective initial variables, then they should be placed in the conditional.
+            // Otherwise, rewrite them using only initial variables and place them outside
+            // the conditional
             ExprSet rewrittenConjs;
             ExprSet originalConjs;
-
             for (const auto &c : initConjuncts)
             {
-                // bool condConj = false;
-
-                // Finds all the equalities that are unnecessary for this work.
-                /*
-                if (isOpX<EQ>(c) && c->arity() == 2)
-                {
-                    Expr l = c->left();
-                    Expr r = c->right();
-
-                    bool lIsInit = isInitVarByName(l);
-                    bool rIsInit = isInitVarByName(r);
-                    bool lIsBase = substitutions.count(l) > 0;
-                    bool rIsBase = substitutions.count(r) > 0;
-
-                    // Drop equalities that only link a base variable to its init variable.
-                    if ((lIsBase && rIsInit) || (lIsInit && rIsBase) || (lIsBase && rIsBase))
-                    {
-                        condConj = true;
-                    }
-                }
-                else if (containsAny(c, varWithoutInit))
-                {
-                    condConj = true;
-                }
-                */
                 if (containsAny(c, auxiliaryVars) || containsAny(c, varWithoutInit))
                 {
                     originalConjs.insert(c);
@@ -356,11 +279,12 @@ namespace ufo
                 }
             }
 
+            // Create final formula representing information on the initial state of the system
+            // and on the bounds of the initial variables.
             Expr rewrittenBody = rewrittenConjs.empty() ? mk<TRUE>(m_efac) : conjoin(rewrittenConjs, m_efac);
             Expr originalBody = originalConjs.empty() ? mk<TRUE>(m_efac) : conjoin(originalConjs, m_efac);
             Expr conditional = mk<IMPL>(conds, originalBody);
             Expr test = mk<AND>(conditional, rewrittenBody);
-            outs() << test << "\n";
             return test;
         }
 

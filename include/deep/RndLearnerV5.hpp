@@ -12,6 +12,7 @@
 #include <vector>
 #include <map>
 #include <optional>
+#include <numeric>
 #include <algorithm> // For std::find
 #include <boost/algorithm/string.hpp>
 #include <nlohmann/json.hpp>
@@ -2790,12 +2791,77 @@ namespace ufo
             return test;
         }
 
-        void printStatistics(void)
+        void printStatistics(const std::vector<std::chrono::duration<double>> &synthTime,
+                             const std::vector<std::size_t> &attemptCount)
         {
-            outs() << "Statistics\n";
-            outs() << "# Phase Lemmas Generated: " << "\n";
-            outs() << "Median Runtime per Phase Lemma Generated" << "\n";
-            outs() << "Mean Runtime per Phase Lemma Generated" << "\n";
+            auto meanOf = [](const std::vector<double> &vals) -> double
+            {
+                if (vals.empty())
+                    return 0.0;
+                double sum = std::accumulate(vals.begin(), vals.end(), 0.0);
+                return sum / static_cast<double>(vals.size());
+            };
+
+            auto medianOf = [](std::vector<double> vals) -> double
+            {
+                if (vals.empty())
+                    return 0.0;
+                std::sort(vals.begin(), vals.end());
+                size_t n = vals.size();
+                if (n % 2 == 1)
+                    return vals[n / 2];
+                return 0.5 * (vals[n / 2 - 1] + vals[n / 2]);
+            };
+
+            auto firstDerivativeOf = [](const std::vector<double> &vals) -> std::vector<double>
+            {
+                std::vector<double> d1;
+                if (vals.size() < 2)
+                    return d1;
+                d1.reserve(vals.size() - 1);
+                for (size_t i = 1; i < vals.size(); ++i)
+                    d1.push_back(vals[i] - vals[i - 1]);
+                return d1;
+            };
+
+            auto secondDerivativeOf = [&](const std::vector<double> &vals) -> std::vector<double>
+            {
+                return firstDerivativeOf(firstDerivativeOf(vals));
+            };
+
+            auto makeStats = [&](const std::vector<double> &vals) -> nlohmann::json
+            {
+                std::vector<double> d1 = firstDerivativeOf(vals);
+                std::vector<double> d2 = secondDerivativeOf(vals);
+
+                nlohmann::json stats;
+                stats["samples"] = vals.size();
+                stats["mean"] = meanOf(vals);
+                stats["median"] = medianOf(vals);
+                stats["first_derivative_samples"] = d1.size();
+                stats["first_derivative_mean"] = meanOf(d1);
+                stats["first_derivative_median"] = medianOf(d1);
+                stats["second_derivative_samples"] = d2.size();
+                stats["second_derivative_mean"] = meanOf(d2);
+                stats["second_derivative_median"] = medianOf(d2);
+                return stats;
+            };
+
+            std::vector<double> synthSeconds;
+            synthSeconds.reserve(synthTime.size());
+            for (const auto &d : synthTime)
+                synthSeconds.push_back(d.count());
+
+            std::vector<double> attemptsAsDouble;
+            attemptsAsDouble.reserve(attemptCount.size());
+            for (auto a : attemptCount)
+                attemptsAsDouble.push_back(static_cast<double>(a));
+
+            nlohmann::json payload;
+            payload["synth_time_seconds"] = makeStats(synthSeconds);
+            payload["attempt_count"] = makeStats(attemptsAsDouble);
+
+            outs() << payload.dump() << "\n";
         }
     };
 
@@ -2948,6 +3014,10 @@ namespace ufo
         getConj(rootBounds, lemmasSet);
         getConj(initialCondition, lemmasSet);
         Expr firstInv = conjoin(lemmasSet, m_efac);
+
+        std::vector<std::chrono::duration<double>> synthTime;
+        std::vector<std::size_t> attemptCount;
+
         if (debug >= 3)
         {
             ruleManager.print(true);
@@ -2983,6 +3053,8 @@ namespace ufo
                     ds.generateCertificate(certificatePath, i, annotations);
                 }
 
+                ds.printStatistics(synthTime, attemptCount);
+
                 exit(EXIT_SUCCESS);
             }
             ds.learnedExprs[i].insert(firstInv);
@@ -2997,6 +3069,7 @@ namespace ufo
             {
                 outs() << "initial invariant did not pass initiation and consecution...\n";
             }
+            ds.printStatistics(synthTime, attemptCount);
             outs() << "unknown\n";
 
             return;
@@ -3090,9 +3163,7 @@ namespace ufo
         Expr itr = zeroReal;
         map<int, ExprVector> verifiedLemmas;
 
-        std::vector<std::chrono::duration<double>> synthTime;
         synthTime.reserve(max_iterations * 2);
-        std::vector<std::size_t> attemptCount;
         attemptCount.reserve(max_iterations * 2);
         std::size_t count = 0;
         for (size_t j = 1; j < max_iterations; j++)
@@ -3130,7 +3201,7 @@ namespace ufo
                 Expr upperLemma = newLemma;
                 previousUpper[s] = upperBound;
                 auto end{std::chrono::steady_clock::now()};
-                std::chrono::duration<double> elapsed_seconds{begin - end};
+                std::chrono::duration<double> elapsed_seconds{end - begin};
                 synthTime.push_back(elapsed_seconds);
                 attemptCount.push_back(count);
                 count = 0;
@@ -3169,7 +3240,7 @@ namespace ufo
                 }
 
                 end = std::chrono::steady_clock::now();
-                elapsed_seconds = begin - end;
+                elapsed_seconds = end - begin;
                 synthTime.push_back(elapsed_seconds);
                 attemptCount.push_back(count);
                 count = 0;
@@ -3195,12 +3266,14 @@ namespace ufo
                             {
                                 ds.generateCertificate(certificatePath, i, annotations);
                             }
+                            ds.printStatistics(synthTime, attemptCount);
                             exit(EXIT_SUCCESS);
                         }
                         else
                         {
                             if (debug >= 5)
                                 outs() << "didn't pass initiation...\n";
+                            ds.printStatistics(synthTime, attemptCount);
                             outs() << "unknown\n";
                             exit(EXIT_FAILURE);
                         }
@@ -3231,6 +3304,7 @@ namespace ufo
             }
         }
 
+        ds.printStatistics(synthTime, attemptCount);
         outs() << "Analysis inconclusive after " << max_iterations << " iterations.\n";
         exit(EXIT_SUCCESS);
     }

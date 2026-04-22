@@ -184,6 +184,10 @@ namespace ufo
         map<int, std::vector<std::pair<std::string, std::string>>> pendingInitVarPairs;
         map<int, std::map<std::string, std::string>> initVarNameMap;
         map<int, ExprVector> initVars;
+        /// Variables whose transition was an identity (v' = v) and has been
+        /// rewritten to v' = v_init'.  For these, v = v_init is a global
+        /// invariant property rather than a step-0-only property.
+        map<int, std::set<std::string>> identityLinkedVarNames;
 
         /// Persistent QF_NRA solver, lazily initialized on first use.
         /// Kept as std::optional because ZSolver has no default ctor.
@@ -208,17 +212,14 @@ namespace ufo
 
         Expr generateInitCond(int i)
         {
-            // store all auxiliary variables in one set
+            // All auxiliary variables: loop-varying (roots, index) and
+            // constant (init vars).  Used to decide guard vs global placement.
             ExprSet auxiliaryVars;
             for (const auto &v : symbolicRoots[i])
-            {
                 auxiliaryVars.insert(v);
-            }
             auxiliaryVars.insert(indices[i]);
             for (const auto &v : initVars[i])
-            {
                 auxiliaryVars.insert(v);
-            }
 
             // get the initial body and the cond
             Expr init = getInitBody(i);
@@ -262,17 +263,35 @@ namespace ufo
                 return false;
             };
 
-            // if a conjunct includes auxiliary variables, or variables that don't have
-            // respective initial variables, then they should be placed in the conditional.
-            // Otherwise, rewrite them using only initial variables and place them outside
-            // the conditional
+            // A conjunct belongs in the step-0 conditional guard if it references
+            // auxiliary variables (roots, index, init vars) or variables that have
+            // no corresponding init variable.
+            // Exception: if the conjunct is v = v_init where v had an identity
+            // transition (v' = v) that was rewritten to v' = v_init', then
+            // v = v_init is globally invariant and belongs outside the guard.
             ExprSet rewrittenConjs;
             ExprSet originalConjs;
             for (const auto &c : initConjuncts)
             {
                 if (containsAny(c, auxiliaryVars) || containsAny(c, varWithoutInit))
                 {
-                    originalConjs.insert(c);
+                    // Check whether this equality v = v_init corresponds to a
+                    // variable whose transition was an identity and has been
+                    // rewritten to v' = v_init' — in that case it is global.
+                    bool isIdentityLinked = false;
+                    if (identityLinkedVarNames.count(i) > 0 &&
+                        isOpX<EQ>(c) && c->arity() == 2)
+                    {
+                        auto linked = [&](Expr v)
+                        {
+                            return identityLinkedVarNames[i].count(getVarName(v)) > 0;
+                        };
+                        isIdentityLinked = linked(c->left()) || linked(c->right());
+                    }
+                    if (isIdentityLinked)
+                        rewrittenConjs.insert(c); // global — no substitution needed
+                    else
+                        originalConjs.insert(c);
                 }
                 else
                 {
@@ -354,10 +373,34 @@ namespace ufo
                     hr.dstVars.push_back(initVarPrime);
 
                     // Initial-value variables are constants across transitions.
+                    // If the body contains the identity v' = v, replace it with
+                    // v' = v_init' so the link between v and its initial value is
+                    // explicit in the transition (not only in the fact).
                     ExprSet bodyConj;
                     getConj(hr.body, bodyConj);
-                    bodyConj.insert(mk<EQ>(initVarPrime, initVar));
-                    hr.body = conjoin(bodyConj, m_efac);
+                    bool foundIdentity = false;
+                    ExprSet newBodyConj;
+                    for (const auto &conj : bodyConj)
+                    {
+                        if (isOpX<EQ>(conj) && conj->arity() == 2)
+                        {
+                            Expr l = conj->left(), r = conj->right();
+                            if ((l == baseVarPrime && r == baseVar) ||
+                                (r == baseVarPrime && l == baseVar))
+                            {
+                                // Replace v' = v  with  v' = v_init'
+                                newBodyConj.insert(mk<EQ>(baseVarPrime, initVarPrime));
+                                foundIdentity = true;
+                                continue;
+                            }
+                        }
+                        newBodyConj.insert(conj);
+                    }
+                    newBodyConj.insert(mk<EQ>(initVarPrime, initVar));
+                    hr.body = conjoin(newBodyConj, m_efac);
+
+                    if (foundIdentity)
+                        identityLinkedVarNames[invIdx].insert(varName);
                 }
 
                 if (hr.isQuery && srcNum == invIdx)
@@ -462,12 +505,161 @@ namespace ufo
                 }
                 else if (absTemp == 0.0)
                 {
-                    // Could not evaluate — skip rather than assert =1
-                    if (printLog >= 2)
+                    // Could not evaluate numerically.  Check whether the base
+                    // string is a known init variable (e.g. _FH_0_INIT).
+                    // If it is, extract its lower/upper bounds from the fact
+                    // (init) body and use them to derive which eigenvalue
+                    // regimes (_r < 1, _r = 1, _r > 1) are possible.
+                    // Per design assumption: the init variable must be strictly
+                    // positive (lb > 0); if it is not, we abort with an error.
+                    //
+                    // initVarNameMap[i] maps  baseVarName → initVarName
+                    // (e.g. "_FH_0" → "_FH_0_INIT").
+                    // The fact body (via getInitBody) uses the unprimed BASE var
+                    // (e.g. _FH_0), so we search by base-var name.
+                    std::string initVarName; // e.g. "_FH_0_INIT"
+                    std::string baseVarName; // e.g. "_FH_0"
+                    if (initVarNameMap.count(i) > 0)
                     {
-                        outs() << "Warning: could not evaluate base \""
-                               << numeric << "\" for " << symbolic
-                               << " — skipping bounds\n";
+                        std::string numericLower = boost::algorithm::to_lower_copy(numeric);
+                        for (const auto &[svar, initname] : initVarNameMap[i])
+                        {
+                            if (boost::algorithm::to_lower_copy(initname) == numericLower)
+                            {
+                                initVarName = initname;
+                                baseVarName = svar;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (initVarName.empty())
+                    {
+                        if (printLog >= 2)
+                            outs() << "Warning: could not evaluate base \""
+                                   << numeric << "\" for " << symbolic
+                                   << " — skipping bounds\n";
+                    }
+                    else
+                    {
+                        // Extract bounds of the init variable from the fact body.
+                        // getInitBody maps primed→unprimed, so constraints like
+                        // _FH_0' >= 1 become _FH_0 >= 1.  We therefore search
+                        // for the base variable (e.g. _FH_0), not the init-var.
+                        Expr initBody = getInitBody(i);
+                        ExprSet initConjs;
+                        getConj(initBody, initConjs);
+                        Expr searchVarExpr = bind::realConst(mkTerm<std::string>(baseVarName, m_efac));
+
+                        double lb = -std::numeric_limits<double>::infinity();
+                        double ub = std::numeric_limits<double>::infinity();
+
+                        for (const auto &conj : initConjs)
+                        {
+                            // Match:  initVar >= c   (GEQ or LEQ flipped)
+                            // Match:  initVar <= c
+                            // Match:  initVar = c
+                            auto tryExtract = [&](Expr lhs, Expr rhs, bool flipped)
+                            {
+                                if (lhs != searchVarExpr)
+                                    return;
+                                double val = expr_to_double(rhs);
+                                if (val == 0.0 && !isOpX<MPZ>(rhs) && !isOpX<MPQ>(rhs))
+                                    return; // couldn't evaluate
+                                if (!flipped)
+                                {
+                                    if (isOpX<GEQ>(conj) || isOpX<GT>(conj))
+                                        lb = std::max(lb, val);
+                                    else if (isOpX<LEQ>(conj) || isOpX<LT>(conj))
+                                        ub = std::min(ub, val);
+                                    else if (isOpX<EQ>(conj))
+                                        lb = ub = val;
+                                }
+                                else
+                                {
+                                    // lhs and rhs were swapped; flip sense
+                                    if (isOpX<GEQ>(conj) || isOpX<GT>(conj))
+                                        ub = std::min(ub, val);
+                                    else if (isOpX<LEQ>(conj) || isOpX<LT>(conj))
+                                        lb = std::max(lb, val);
+                                    else if (isOpX<EQ>(conj))
+                                        lb = ub = val;
+                                }
+                            };
+                            if (conj->arity() == 2)
+                            {
+                                tryExtract(conj->left(), conj->right(), false);
+                                tryExtract(conj->right(), conj->left(), true);
+                            }
+                        }
+
+                        if (printLog >= 3)
+                            outs() << "generateRootBounds: init-variable \"" << initVarName
+                                   << "\" lb=" << lb << " ub=" << ub << "\n";
+
+                        // Enforce positivity assumption
+                        if (lb <= 0.0)
+                        {
+                            errs() << "Error: init variable \"" << initVarName
+                                   << "\" used as a root base has lower bound " << lb
+                                   << " which is not strictly positive. "
+                                   << "Non-positive initial values for root bases are not supported.\n";
+                            outs() << "unknown\n";
+                            exit(EXIT_FAILURE);
+                        }
+
+                        // Determine which eigenvalue regimes are reachable and
+                        // build a disjunction of the corresponding root bounds.
+                        //
+                        // Regime 1: base in (0,1)  → root decays:  0 ≤ _r ≤ 1
+                        // Regime 2: base == 1      → root is const: _r = 1
+                        // Regime 3: base > 1       → root grows:   _r ≥ 1
+                        //
+                        // Since lb > 0 (enforced above) the base is always positive,
+                        // so we only need to check overlap with (0,1), {1}, and (1,∞).
+
+                        ExprSet disjuncts;
+
+                        bool canBeBelow1 = (lb < 1.0); // [lb, ub] ∩ (0,1) non-empty
+                        bool canBeExact1 = (lb <= 1.0 && ub >= 1.0);
+                        bool canBeAbove1 = (ub > 1.0); // [lb, ub] ∩ (1,∞) non-empty
+
+                        if (canBeBelow1)
+                        {
+                            // 0 ≤ _r ≤ 1
+                            Expr decayBound = mk<AND>(mk<GEQ>(symbolic, zeroReal),
+                                                      mk<LEQ>(symbolic, oneReal));
+                            disjuncts.insert(decayBound);
+                            if (printLog >= 3)
+                                outs() << "generateRootBounds: regime (0,1) possible for "
+                                       << symbolic << "\n";
+                        }
+                        if (canBeExact1)
+                        {
+                            // _r = 1
+                            disjuncts.insert(mk<EQ>(symbolic, oneReal));
+                            if (printLog >= 3)
+                                outs() << "generateRootBounds: regime {1} possible for "
+                                       << symbolic << "\n";
+                        }
+                        if (canBeAbove1)
+                        {
+                            // _r ≥ 1
+                            disjuncts.insert(mk<GEQ>(symbolic, oneReal));
+                            if (printLog >= 3)
+                                outs() << "generateRootBounds: regime (1,∞) possible for "
+                                       << symbolic << "\n";
+                        }
+
+                        if (!disjuncts.empty())
+                        {
+                            // Combine regimes with OR
+                            Expr rootBound = disjoin(disjuncts, m_efac);
+                            bounds.insert(rootBound);
+                            if (printLog >= 3)
+                                outs() << "generateRootBounds: added disjunctive bound for "
+                                       << symbolic << ": " << rootBound << "\n";
+                        }
                     }
                 }
                 else
@@ -902,16 +1094,24 @@ namespace ufo
 
                         if (match)
                         {
-                            updateValueMap[varName] = exprToPolarString(conj->right(), srcVarRenames);
+                            std::string candidate_mapping = exprToPolarString(conj->right(), srcVarRenames);
+                            // avoid redundant "var = var" update assignments in Polar,
+                            // causes unnecessary slowdown
+                            if (candidate_mapping != varName)
+                            {
+                                updateValueMap[varName] = candidate_mapping;
+                            }
                             foundUpdate = true;
                             break;
                         }
                     }
                 }
+                /*
                 if (!foundUpdate)
                 {
                     updateValueMap[varName] = varName; // Default to "var = var" if no update found
                 }
+                */
             }
 
             // Ensure order for LHS and RHS
@@ -1082,20 +1282,7 @@ namespace ufo
              * Make sure that making all of the variables lower case doesn't lead to name clashes
              * for CHCs where the only distinguishing factor is case.
              */
-            if (!initLhsVars.empty())
-            {
-                for (size_t i = 0; i < initLhsVars.size(); ++i)
-                {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(initLhsVars[i]);
-                }
-                polarProgram << " = ";
-                for (size_t i = 0; i < initRhsVals.size(); ++i)
-                {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(initRhsVals[i]);
-                }
-                polarProgram << "\n";
-            }
-            polarProgram << "while true:\n";
+            // Init line is written below, after identity variables are identified.
             std::vector<std::string> loopLhsVars;
             std::vector<expr::Expr> loopFinalRhsExprs;
 
@@ -1208,20 +1395,149 @@ namespace ufo
                 std::cout << std::endl;
             }
 
+            // remove redundant assignments "var = var" to Polar program,
+            // causes, unnecessary slowdown.
+            std::map<expr::Expr, expr::Expr> newDefinitions;
+            for (auto d : dstVarDefinitions)
+            {
+                if (printLog >= 3)
+                {
+                    std::cout << "LHS: " << d.first << "\tRHS: " << d.second
+                              << std::endl;
+                }
+                if (getVarName(d.first) + "\'" != getVarName(d.second))
+                {
+                    newDefinitions[d.first] = d.second;
+                }
+            }
+            dstVarDefinitions = newDefinitions;
+
             // Convert the final RHS expressions to strings
             std::vector<std::string> loopRhsStrings;
             for (const auto &rhsExpr : loopFinalRhsExprs)
             {
-                loopRhsStrings.push_back(exprToPolarString(rhsExpr, srcVarRenames));
+                loopRhsStrings.push_back(exprToPolarString(
+                    rhsExpr, srcVarRenames));
             }
+
+            // Identify variables with identity transitions (v' = v; never update).
+            // Replace them with their _init form so POLAR treats them as parameters.
+            std::set<std::string> identityVarsFound;
+            for (size_t k = 0; k < loopLhsVars.size(); ++k)
+            {
+                if (loopLhsVars[k] == loopRhsStrings[k])
+                {
+                    const std::string &v = loopLhsVars[k];
+                    identityVarsFound.insert(v);
+                    // If this var has a constant init (not yet a _INIT form), promote it.
+                    if (initVarNameMap[myinv].count(v) == 0)
+                    {
+                        std::string initName = v + "_INIT";
+                        initVarNameMap[myinv][v] = initName;
+                        if (std::find(initVarNames[myinv].begin(), initVarNames[myinv].end(), initName) == initVarNames[myinv].end())
+                        {
+                            initVarNames[myinv].push_back(initName);
+                            pendingInitVarPairs[myinv].push_back({v, initName});
+                        }
+                    }
+                    // Update initialValueMap to use the symbolic _INIT form.
+                    initialValueMap[v] = initVarNameMap[myinv][v];
+                }
+            }
+
+            // Replace identity var names in loop body RHS strings with their _init forms.
+            // loopRhsStrings use canonical (uppercase) names, so search with the original case.
+            for (const auto &ivar : identityVarsFound)
+            {
+                std::string from = ivar;                      // e.g. "_FH_1" (canonical)
+                std::string to = initVarNameMap[myinv][ivar]; // e.g. "_FH_1_INIT"
+                for (auto &s : loopRhsStrings)
+                {
+                    std::string result;
+                    size_t pos = 0;
+                    while (pos < s.size())
+                    {
+                        size_t found = s.find(from, pos);
+                        if (found == std::string::npos)
+                        {
+                            result += s.substr(pos);
+                            break;
+                        }
+                        bool leftOK = (found == 0 ||
+                                       (!std::isalnum((unsigned char)s[found - 1]) && s[found - 1] != '_'));
+                        bool rightOK = (found + from.size() >= s.size() ||
+                                        (!std::isalnum((unsigned char)s[found + from.size()]) &&
+                                         s[found + from.size()] != '_'));
+                        result += s.substr(pos, found - pos);
+                        result += (leftOK && rightOK) ? to : from;
+                        pos = found + from.size();
+                    }
+                    s = result;
+                }
+            }
+
+            // Write the POLAR init line, excluding identity variables (they become parameters).
+            {
+                bool firstVar = true;
+                for (size_t i = 0; i < initLhsVars.size(); ++i)
+                {
+                    if (identityVarsFound.count(initLhsVars[i]) == 0)
+                    {
+                        polarProgram << (firstVar ? "" : ", ")
+                                     << boost::algorithm::to_lower_copy(initLhsVars[i]);
+                        firstVar = false;
+                    }
+                }
+                if (!firstVar)
+                {
+                    polarProgram << " = ";
+                    bool firstVal = true;
+                    for (size_t i = 0; i < initLhsVars.size(); ++i)
+                    {
+                        if (identityVarsFound.count(initLhsVars[i]) == 0)
+                        {
+                            polarProgram << (firstVal ? "" : ", ")
+                                         << boost::algorithm::to_lower_copy(initialValueMap[initLhsVars[i]]);
+                            firstVal = false;
+                        }
+                    }
+                    polarProgram << "\n";
+                }
+            }
+            polarProgram << "while true:\n";
 
             if (!loopLhsVars.empty())
             {
                 polarProgram << "    ";
-                // This program assumes that the polar variables for each invariant are generated in order
+                // This program assumes that the polar variables for
+                // each invariant are generated in order
                 assert(polarVarNames.size() < invNumber);
                 assert(polarVarNames.size() == myinv);
                 polarVarNames.push_back(std::vector<std::string>());
+
+                std::vector<std::string> newVars;
+                std::vector<std::string> newStrings;
+
+                for (auto i = 0; i < loopLhsVars.size(); ++i)
+                {
+                    std::string s1 = loopLhsVars[i];
+                    std::string s2 = loopRhsStrings[i];
+
+                    if (identityVarsFound.count(s1) > 0)
+                    {
+                        // Identity variable: already replaced with _init form above.
+                        // Skip — do not add to loop body or polarVarNames.
+                    }
+                    else
+                    {
+                        newVars.push_back(s1);
+                        newStrings.push_back(s2);
+                    }
+                }
+
+                loopLhsVars = newVars;
+                loopRhsStrings = newStrings;
+
                 for (size_t i = 0; i < loopLhsVars.size(); ++i)
                 {
                     std::string s = boost::algorithm::to_lower_copy(loopLhsVars[i]);
@@ -1854,6 +2170,14 @@ namespace ufo
 
             Expr myRootUpdate = str_to_expr(rootVal, sqrts);
 
+            // Normalize init-variable names that POLAR emits in lowercase
+            // (e.g. _fh_0_init) to the internal uppercase representation
+            // (e.g. _FH_0_INIT).  replaceCoeffVariables performs a
+            // case-insensitive lookup against initVarNames and uppercases
+            // any match, so this is safe for purely numeric bases too.
+            if (indices.count(i) > 0)
+                myRootUpdate = replaceCoeffVariables(myRootUpdate, indices[i], i);
+
             if (isOpX<expr::op::DIV>(myRootUpdate))
             {
                 Expr left = myRootUpdate->left();
@@ -2134,7 +2458,17 @@ namespace ufo
             ExprVector bodyVar;
             std::copy_if(allVar.begin(), allVar.end(), std::back_inserter(bodyVar),
                          [&](Expr e)
-                         { return contains(qr[i]->body, e); });
+                         {
+                             if (!contains(qr[i]->body, e))
+                                 return false;
+                             // Exclude identity vars (v'=v): they are replaced by _init
+                             // parameters in the POLAR program and have no loop recurrence.
+                             std::string name = getVarName(e);
+                             if (identityLinkedVarNames.count(i) > 0 &&
+                                 identityLinkedVarNames.at(i).count(name) > 0)
+                                 return false;
+                             return true;
+                         });
             auto shellQuote = [](const std::string &path)
             {
                 std::string quoted = "'";
@@ -3130,11 +3464,11 @@ namespace ufo
             {
                 continue;
             }
-            numeralsToKeep.push_back(n);
-            symbolsToKeep.push_back(s);
             double val = ds.expr_to_double(n);
             if (val > 1.0) // uphill
             {
+                numeralsToKeep.push_back(n);
+                symbolsToKeep.push_back(s);
                 phaseLemmas pl;
                 pl.max = backward;
                 pl.min = forward;
@@ -3142,6 +3476,8 @@ namespace ufo
             }
             else if (val < 1.0 && val > 0.0) // downhill
             {
+                numeralsToKeep.push_back(n);
+                symbolsToKeep.push_back(s);
                 phaseLemmas pl;
                 pl.max = forward;
                 pl.min = backward;
@@ -3149,17 +3485,29 @@ namespace ufo
             }
             else
             {
+                // Symbolic or unevaluable root (e.g. an init variable like
+                // _FH_0_INIT whose numeric value is not statically known).
+                // Skip it in the phase-bound loop to avoid calling an
+                // uninitialised phaseLemmas dispatch entry.
                 if (debug >= 3)
                 {
-                    outs() << "Unsupported root: " << n << "\n";
+                    outs() << "Unsupported/symbolic root (skipped in phase analysis): " << n << "\n";
                 }
-
-                outs() << "unknown\n";
             }
         }
 
         ds.numericRoots[i] = numeralsToKeep;
         ds.symbolicRoots[i] = symbolsToKeep;
+
+        if (symbolsToKeep.empty())
+        {
+            if (debug >= 3)
+                outs() << "No non-trivial roots found for invariant " << i
+                       << "; skipping phase-bound loop.\n";
+            outs() << "unknown\n";
+            return;
+        }
+
         Expr itr = zeroReal;
         map<int, ExprVector> verifiedLemmas;
 

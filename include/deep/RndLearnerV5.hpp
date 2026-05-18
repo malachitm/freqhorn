@@ -7,8 +7,6 @@
 #include "deep/Horn.hpp"    // For CHCs, HornRuleExt
 #include "ufo/Expr.hpp"     // For Expr, ExprVector, etc.
 #include "ae/ExprSimpl.hpp" // For getConj, etc.
-#include <fstream>
-#include <sstream>
 #include <vector>
 #include <map>
 #include <optional>
@@ -19,7 +17,6 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
-#include <iostream>
 #include <string>
 #include <utility>     // for std::pair
 #include <type_traits> // for std::is_arithmetic_v
@@ -30,12 +27,31 @@
 #include <chrono>      // For timing QF_NRA solver
 #include <boost/range/combine.hpp>
 #include <iostream>
-#include <stdexcept>
 #include <sys/wait.h>
 #include <stdio.h>
-#include <string>
 using namespace std;
 using namespace boost;
+
+// Debug logging macros — zero cost in release builds (NDEBUG defined by CMake -DCMAKE_BUILD_TYPE=Release)
+#ifdef NDEBUG
+#define DLOG(level) \
+    if (false)      \
+    outs()
+#define DLOG_IF(level) if (false)
+#define DLOGD(level) \
+    if (false)       \
+    outs()
+#define DLOGD_IF(level) if (false)
+#else
+#define DLOG(level)          \
+    if (printLog >= (level)) \
+    outs()
+#define DLOG_IF(level) if (printLog >= (level))
+#define DLOGD(level)      \
+    if (debug >= (level)) \
+    outs()
+#define DLOGD_IF(level) if (debug >= (level))
+#endif
 
 struct CommandResult
 {
@@ -475,7 +491,7 @@ namespace ufo
                 double temp = evaluateBaseString(numeric);
                 if (temp < 0)
                 {
-                    if (printLog >= 3)
+                    DLOG_IF(3)
                     {
                         outs() << "negative roots are not supported\n";
                         outs() << "root: " << numeric << "\n";
@@ -485,12 +501,9 @@ namespace ufo
                 }
                 double absTemp = temp;
 
-                if (printLog >= 3)
-                {
-                    outs() << "generateRootBounds: base=\"" << numeric
-                           << "\" value=" << temp
-                           << " |value|=" << absTemp << "\n";
-                }
+                DLOG(3) << "generateRootBounds: base=\"" << numeric
+                        << "\" value=" << temp
+                        << " |value|=" << absTemp << "\n";
 
                 if (absTemp > 0.0 && absTemp < 1.0)
                 {
@@ -535,10 +548,9 @@ namespace ufo
 
                     if (initVarName.empty())
                     {
-                        if (printLog >= 2)
-                            outs() << "Warning: could not evaluate base \""
-                                   << numeric << "\" for " << symbolic
-                                   << " — skipping bounds\n";
+                        DLOG(2) << "Warning: could not evaluate base \""
+                                << numeric << "\" for " << symbolic
+                                << " — skipping bounds\n";
                     }
                     else
                     {
@@ -593,9 +605,8 @@ namespace ufo
                             }
                         }
 
-                        if (printLog >= 3)
-                            outs() << "generateRootBounds: init-variable \"" << initVarName
-                                   << "\" lb=" << lb << " ub=" << ub << "\n";
+                        DLOG(3) << "generateRootBounds: init-variable \"" << initVarName
+                                << "\" lb=" << lb << " ub=" << ub << "\n";
 
                         // Enforce positivity assumption
                         if (lb <= 0.0)
@@ -630,25 +641,22 @@ namespace ufo
                             Expr decayBound = mk<AND>(mk<GEQ>(symbolic, zeroReal),
                                                       mk<LEQ>(symbolic, oneReal));
                             disjuncts.insert(decayBound);
-                            if (printLog >= 3)
-                                outs() << "generateRootBounds: regime (0,1) possible for "
-                                       << symbolic << "\n";
+                            DLOG(3) << "generateRootBounds: regime (0,1) possible for "
+                                    << symbolic << "\n";
                         }
                         if (canBeExact1)
                         {
                             // _r = 1
                             disjuncts.insert(mk<EQ>(symbolic, oneReal));
-                            if (printLog >= 3)
-                                outs() << "generateRootBounds: regime {1} possible for "
-                                       << symbolic << "\n";
+                            DLOG(3) << "generateRootBounds: regime {1} possible for "
+                                    << symbolic << "\n";
                         }
                         if (canBeAbove1)
                         {
                             // _r ≥ 1
                             disjuncts.insert(mk<GEQ>(symbolic, oneReal));
-                            if (printLog >= 3)
-                                outs() << "generateRootBounds: regime (1,∞) possible for "
-                                       << symbolic << "\n";
+                            DLOG(3) << "generateRootBounds: regime (1,∞) possible for "
+                                    << symbolic << "\n";
                         }
 
                         if (!disjuncts.empty())
@@ -656,9 +664,8 @@ namespace ufo
                             // Combine regimes with OR
                             Expr rootBound = disjoin(disjuncts, m_efac);
                             bounds.insert(rootBound);
-                            if (printLog >= 3)
-                                outs() << "generateRootBounds: added disjunctive bound for "
-                                       << symbolic << ": " << rootBound << "\n";
+                            DLOG(3) << "generateRootBounds: added disjunctive bound for "
+                                    << symbolic << ": " << rootBound << "\n";
                         }
                     }
                 }
@@ -666,11 +673,8 @@ namespace ufo
                 {
                     // |eigenvalue| > 1: root grows — still valid but unbounded
                     // For now just skip; no useful bound to add
-                    if (printLog >= 3)
-                    {
-                        outs() << "generateRootBounds: |eigenvalue| > 1 for "
-                               << symbolic << ", no bound added\n";
-                    }
+                    DLOG(3) << "generateRootBounds: |eigenvalue| > 1 for "
+                            << symbolic << ", no bound added\n";
                 }
             }
 
@@ -686,9 +690,8 @@ namespace ufo
                     Expr sqrtVar = bind::realConst(mkTerm<std::string>(fullName, m_efac));
                     Expr constraint = createRootConstraint(sqrtVar, sqrtSuffix);
                     bounds.insert(constraint);
-                    if (printLog >= 3)
-                        outs() << "generateRootBounds: added sqrt constraint for "
-                               << fullName << ": " << constraint << "\n";
+                    DLOG(3) << "generateRootBounds: added sqrt constraint for "
+                            << fullName << ": " << constraint << "\n";
                 }
             }
 
@@ -736,7 +739,7 @@ namespace ufo
                 {
                     std::string c_str = coeff_itr->is_number() ? std::to_string(coeff_itr->get<int>()) : coeff_itr->get<std::string>();
                     std::string b_str = base_itr->is_number() ? std::to_string(base_itr->get<int>()) : base_itr->get<std::string>();
-                    if (printLog >= 5)
+                    DLOG_IF(5)
                     {
                         outs() << "c_str: " << c_str << "\n";
                         outs() << "b_str: " << b_str << "\n";
@@ -747,8 +750,7 @@ namespace ufo
                     }
 
                     Expr t = str_to_expr(c_str);
-                    if (printLog >= 5)
-                        outs() << "new expression: " << t << "\n";
+                    DLOG(5) << "new expression: " << t << "\n";
                     Expr c = replaceCoeffVariables(t, index, i);
                     Expr b = rootMap[b_str];
                     if (jdx == 0)
@@ -771,7 +773,7 @@ namespace ufo
         {
             // Iterate over the definitions and replace variables in the RHS with their definitions
             bool changedInPass = true;
-            if (printLog > 3)
+            DLOG_IF(4)
             {
                 outs() << "Resolving dependencies for definitions:\n";
                 for (const auto &def : definitions)
@@ -797,10 +799,7 @@ namespace ufo
                         auto it = definitions.find(var);
                         if (it != definitions.end())
                         {
-                            if (printLog > 3)
-                            {
-                                outs() << "Substituting " << *var << " with " << *it->second << "\n";
-                            }
+                            DLOG(4) << "Substituting " << *var << " with " << *it->second << "\n";
                             // ...add its own definition to the substitution map for the current expression.
                             substitutions[it->first] = it->second;
                         }
@@ -814,10 +813,7 @@ namespace ufo
                             def.second = newRHS;
                             changedInPass = true;
                         }
-                        if (printLog > 3)
-                        {
-                            outs() << "Updated definition: " << *def.first << " = " << *def.second << "\n";
-                        }
+                        DLOG(4) << "Updated definition: " << *def.first << " = " << *def.second << "\n";
                     }
                 }
                 // If a full pass makes no changes, we are done.
@@ -826,7 +822,7 @@ namespace ufo
                     break;
                 }
             }
-            if (printLog > 3)
+            DLOG_IF(4)
             {
                 outs() << "Final dependencies for definitions:\n";
                 for (const auto &def : definitions)
@@ -853,7 +849,7 @@ namespace ufo
         // Helper function to convert an Expr to its POLAR string representation
         std::string exprToPolarString(const Expr &e, const std::map<std::string, std::string> &varRenames = {})
         {
-            if (printLog >= 3)
+            DLOG_IF(3)
             {
                 std::cout << "Converting expresion to POLAR string: " << *e << std::endl;
             }
@@ -915,241 +911,6 @@ namespace ufo
             // Add more operators as needed (e.g., MOD)
             std::cout << "Unsupported expression type: " << *e << std::endl;
             return "unsupported_expr(" + boost::lexical_cast<std::string>(e->op()) + ")";
-        }
-
-        void generatePolarFile(ufo::CHCs &ruleManager, const std::string &outputFilename)
-        {
-            ufo::HornRuleExt *factRule = nullptr;
-            ufo::HornRuleExt *inductiveRule = nullptr;
-
-            for (auto &rule : ruleManager.chcs)
-            {
-                if (rule.isFact)
-                {
-                    factRule = &rule;
-                }
-                if (rule.isInductive)
-                {
-                    inductiveRule = &rule;
-                }
-            }
-
-            if (!factRule)
-            {
-                std::cerr << "Error: Fact CHC not found." << std::endl;
-                return;
-            }
-            if (!inductiveRule)
-            {
-                std::cerr << "Error: Inductive CHC not found." << std::endl;
-                return;
-            }
-
-            std::ostringstream polarProgram;
-            std::vector<std::string> initLhsVars, initRhsVals;
-            std::map<std::string, std::string> initialValueMap; // var_name -> value_string
-
-            // 1. Process Fact CHC for initial values
-            // Use canonical variable names from invVars for the relation
-            expr::Expr factRelation = factRule->dstRelation; // This is the relation name (e.g., "inv")
-            const expr::ExprVector &canonicalFactVars = ruleManager.invVars[factRelation];
-
-            // Create a map from the Expr in dstVars of the fact to its canonical name string
-            std::map<expr::Expr, std::string> factDstVarToName;
-            for (size_t i = 0; i < factRule->dstVars.size() && i < canonicalFactVars.size(); ++i)
-            {
-                // It's safer to use the names from invVars[factRelation] if dstVars are just placeholders
-                // or if their names in the rule aren't the canonical ones.
-                // For simplicity, we'll assume dstVars in the rule match the canonical order/names
-                // or that invVars gives the true names for the positions.
-                factDstVarToName[factRule->dstVars[i]] = getVarName(canonicalFactVars[i]);
-            }
-
-            expr::ExprSet factConjuncts;
-            ufo::getConj(factRule->body, factConjuncts);
-
-            for (const auto &varExpr : canonicalFactVars)
-            {
-                std::string varName = getVarName(varExpr);
-                initLhsVars.push_back(varName);
-                bool foundAssignment = false;
-                for (const auto &conj : factConjuncts)
-                {
-                    if (expr::isOpX<expr::op::EQ>(conj) && conj->arity() == 2)
-                    {
-                        // Check if conj->right() corresponds to varExpr
-                        // This direct comparison might fail if they are different Expr objects
-                        // even if they represent the "same" variable in different contexts.
-                        // A more robust way is to compare names if dstVars in rule are named.
-                        std::string conjVarName;
-                        if (printLog > 3)
-                        {
-                            std::cout << "Processing EQ: " << *conj << " for variable: " << varName << std::endl;
-                            std::cout << "Left side of EQ: " << *conj->left() << std::endl;
-                            std::cout << "Right side of EQ: " << *conj->right() << std::endl;
-                        }
-
-                        if (factDstVarToName.count(conj->left()))
-                        {
-                            conjVarName = factDstVarToName[conj->left()];
-                        }
-                        else
-                        {
-                            // Fallback if conj->right() is not directly in dstVars (e.g. it's already a canonical var Expr)
-                            conjVarName = getVarName(conj->left());
-                        }
-
-                        if (conjVarName == varName)
-                        {
-                            if (expr::isOpX<expr::op::MPZ>(conj->left()) || expr::isOpX<expr::op::MPQ>(conj->left()))
-                            {
-                                initialValueMap[varName] = exprToPolarString(conj->left());
-                                foundAssignment = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (!foundAssignment)
-                {
-                    initialValueMap[varName] = varName + "_INIT";
-                }
-            }
-
-            // Ensure order for LHS and RHS
-            for (const auto &varName : initLhsVars)
-            {
-                initRhsVals.push_back(initialValueMap[varName]);
-            }
-
-            /**
-             * TODO:
-             * Make sure that making all of the variables lower case doesn't lead to name clashes
-             * for CHCs where the only distinguishing factor is case.
-             */
-            if (!initLhsVars.empty())
-            {
-                for (size_t i = 0; i < initLhsVars.size(); ++i)
-                {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(initLhsVars[i]);
-                }
-                polarProgram << " = ";
-                for (size_t i = 0; i < initRhsVals.size(); ++i)
-                {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(initRhsVals[i]);
-                }
-                polarProgram << "\n";
-            }
-
-            // 2. Process Transition CHC for loop updates
-            polarProgram << "while true:\n";
-            std::vector<std::string> loopLhsVars, loopRhsExprs;
-            std::map<std::string, std::string> updateValueMap;
-
-            // Use canonical variable names for the inductive relation
-            expr::Expr indRelation = inductiveRule->srcRelation; // src and dst relation are the same
-            const expr::ExprVector &canonicalIndVarsSrc = ruleManager.invVars[indRelation];
-            const expr::ExprVector &canonicalIndVarsDst = ruleManager.invVarsPrime[indRelation]; // Or invVars if primes are not distinct
-
-            // Map for renaming srcVars in the body to their base names for exprToPolarString
-            std::map<std::string, std::string> srcVarRenames;
-            for (size_t i = 0; i < inductiveRule->srcVars.size() && i < canonicalIndVarsSrc.size(); ++i)
-            {
-                // Get the base name from canonicalFactVars (assuming order correspondence)
-                srcVarRenames[getVarName(inductiveRule->srcVars[i])] = getVarName(canonicalIndVarsSrc[i]);
-            }
-
-            expr::ExprSet inductiveConjuncts;
-            ufo::getConj(inductiveRule->body, inductiveConjuncts);
-
-            for (const auto &dstVarExprCanonical : canonicalIndVarsDst)
-            {                                                          // Iterate using canonical dst var order
-                std::string varName = getVarName(dstVarExprCanonical); // This is the name for LHS of POLAR
-                loopLhsVars.push_back(varName);
-                bool foundUpdate = false;
-                for (const auto &conj : inductiveConjuncts)
-                {
-                    if (expr::isOpX<expr::op::EQ>(conj) && conj->arity() == 2)
-                    {
-                        // We need to match conj->left() (a dstVar from the rule)
-                        // with dstVarExprCanonical (a canonical dstVar Expr)
-                        std::string conjDstVarName = getVarName(conj->left());
-                        std::cout << "Checking EQ: " << *conj << " for variable: " << varName << std::endl;
-                        std::cout << "Conj left: " << *conj->left() << ", Conj right: " << *conj->right() << std::endl;
-                        // A more direct mapping if dstVars in rule are consistently named:
-                        // if (getVarName(conj->left()) == varName) { ... }
-                        // This assumes that inductiveRule->dstVars items correspond positionally
-                        // to canonicalIndVarsDst, and we can map by comparing their names.
-                        // A robust way: find which inductiveRule->dstVars[j] corresponds to dstVarExprCanonical,
-                        // then check if conj->left() IS inductiveRule->dstVars[j].
-                        bool match = false;
-                        for (const auto &ruleDstVar : inductiveRule->dstVars)
-                        {
-                            if (getVarName(ruleDstVar) == varName && ruleDstVar == conj->left())
-                            {
-                                match = true;
-                                break;
-                            }
-                        }
-
-                        if (match)
-                        {
-                            std::string candidate_mapping = exprToPolarString(conj->right(), srcVarRenames);
-                            // avoid redundant "var = var" update assignments in Polar,
-                            // causes unnecessary slowdown
-                            if (candidate_mapping != varName)
-                            {
-                                updateValueMap[varName] = candidate_mapping;
-                            }
-                            foundUpdate = true;
-                            break;
-                        }
-                    }
-                }
-                /*
-                if (!foundUpdate)
-                {
-                    updateValueMap[varName] = varName; // Default to "var = var" if no update found
-                }
-                */
-            }
-
-            // Ensure order for LHS and RHS
-            for (const auto &varName : loopLhsVars)
-            {
-                loopRhsExprs.push_back(updateValueMap[varName]);
-            }
-
-            if (!loopLhsVars.empty())
-            {
-                polarProgram << "    ";
-                for (size_t i = 0; i < loopLhsVars.size(); ++i)
-                {
-                    std::string x = boost::algorithm::to_lower_copy(loopLhsVars[i].substr(0, loopLhsVars[i].size() - 1));
-                    polarProgram << (i == 0 ? "" : ", ") << x;
-                }
-                polarProgram << " = ";
-                for (size_t i = 0; i < loopRhsExprs.size(); ++i)
-                {
-                    polarProgram << (i == 0 ? "" : ", ") << boost::algorithm::to_lower_copy(loopRhsExprs[i]);
-                }
-                polarProgram << "\n";
-            }
-
-            polarProgram << "end\n";
-
-            // 3. Write to file
-            std::ofstream outFile(outputFilename);
-            if (outFile.is_open())
-            {
-                outFile << polarProgram.str();
-                outFile.close();
-                std::cout << "Successfully wrote POLAR program to " << outputFilename << std::endl;
-            }
-            else
-            {
-                std::cerr << "Error: Unable to open file " << outputFilename << " for writing." << std::endl;
-            }
         }
 
         void generatePolarFile2(ufo::CHCs &ruleManager, const std::string &outputFilename, int myinv = 0)
@@ -1224,7 +985,7 @@ namespace ufo
                         // even if they represent the "same" variable in different contexts.
                         // A more robust way is to compare names if dstVars in rule are named.
                         std::string conjVarName;
-                        if (printLog > 3)
+                        DLOG_IF(4)
                         {
                             std::cout << "Processing EQ: " << *conj << " for variable: " << varName << std::endl;
                             std::cout << "Left side of EQ: " << *conj->left() << std::endl;
@@ -1298,7 +1059,7 @@ namespace ufo
                 if (expr::isOpX<expr::op::EQ>(conj) && conj->arity() == 2)
                 {
                     // Assuming conj->left() is a dstVar and conj->right() is its definition
-                    if (printLog > 3)
+                    DLOG_IF(4)
                     {
                         std::cout << "Assuming conj->left() is a dstVar and conj->right() is its definition." << std::endl;
                         std::cout << "Processing EQ: " << *conj << std::endl;
@@ -1314,7 +1075,7 @@ namespace ufo
             // x' = x + 1 /\ y' = x' + 1 into x' = x + 1 /\ y' = (x + 1) + 1
             resolveDependencies(dstVarDefinitions, inductiveRule->dstVars, inductiveRule->srcVars);
 
-            if (printLog > 3)
+            DLOG_IF(4)
             {
                 std::cout << "Resolved definitions after inlining:" << std::endl;
                 for (const auto &def : dstVarDefinitions)
@@ -1334,7 +1095,7 @@ namespace ufo
             {
                 std::string varName = getVarName(canonicalVar);
                 loopLhsVars.push_back(varName);
-                if (printLog > 5)
+                DLOG_IF(6)
                 {
                     std::cout << "Canonical variable: " << varName << std::endl;
                 }
@@ -1342,7 +1103,7 @@ namespace ufo
                 expr::Expr correspondingDstVar;
                 for (const auto &ruleDstVar : inductiveRule->dstVars)
                 {
-                    if (printLog > 5)
+                    DLOG_IF(6)
                     {
                         std::cout << "Checking ruleDstVar: " << getVarName(ruleDstVar) << std::endl;
                         std::cout << "Comparing with varName: " << (varName + "'") << std::endl;
@@ -1353,7 +1114,7 @@ namespace ufo
                         break;
                     }
                 }
-                if (printLog >= 5)
+                DLOG_IF(5)
                 {
                     std::cout << "Corresponding dstVar: " << (correspondingDstVar ? getVarName(correspondingDstVar) : "not found") << std::endl;
                 }
@@ -1366,7 +1127,7 @@ namespace ufo
                 {
                     // If no update rule is found, assume the variable remains unchanged
                     // Find the corresponding srcVar to represent the "old" value
-                    if (printLog > 5)
+                    DLOG_IF(6)
                     {
                         std::cout << "No update rule found for " << varName << ", looking for srcVars." << std::endl;
                     }
@@ -1380,7 +1141,7 @@ namespace ufo
                     }
                 }
             }
-            if (printLog > 3)
+            DLOG_IF(4)
             {
                 std::cout << "Final LHS variables: ";
                 for (const auto &var : loopLhsVars)
@@ -1400,7 +1161,7 @@ namespace ufo
             std::map<expr::Expr, expr::Expr> newDefinitions;
             for (auto d : dstVarDefinitions)
             {
-                if (printLog >= 3)
+                DLOG_IF(3)
                 {
                     std::cout << "LHS: " << d.first << "\tRHS: " << d.second
                               << std::endl;
@@ -1560,7 +1321,7 @@ namespace ufo
             {
                 outFile << polarProgram.str();
                 outFile.close();
-                if (printLog >= 5)
+                DLOG_IF(5)
                 {
                     std::cout << "Successfully wrote POLAR program to " << outputFilename << std::endl;
                 }
@@ -1600,7 +1361,7 @@ namespace ufo
                         IsVar isVarCheck;
                         IsHardIntConst isHardIntConstCheck;
                         IsConst isConstCheck;
-                        if (printLog >= 3)
+                        DLOG_IF(3)
                         {
                             outs() << "Reflipping equality: " << *conj << "\n";
                             outs() << "Left: " << *left << ", Right: " << *right << "\n";
@@ -1675,14 +1436,13 @@ namespace ufo
             assert(invNum < learnedExprs.size());
             if (learnedExprs[invNum].empty())
                 return mk<TRUE>(m_efac);
-            if (printLog >= 3)
-                outs() << "Gathering lemmas for invariant #" << invNum << ": " << decls[invNum] << "\n";
+            DLOG(3) << "Gathering lemmas for invariant #" << invNum << ": " << decls[invNum] << "\n";
             return conjoin(learnedExprs[invNum], m_efac);
         }
         void initializeDecl2(Expr invDecl)
         {
-            if (printLog)
-                outs() << "\nINITIALIZE PREDICATE " << invDecl << "\n====================\n";
+            DLOG_IF(1)
+            outs() << "\nINITIALIZE PREDICATE " << invDecl << "\n====================\n";
             //      assert (invDecl->arity() > 2);
             assert(decls.size() == invNumber);
             assert(curCandidates.size() == invNumber);
@@ -1693,9 +1453,10 @@ namespace ufo
 
             curCandidates.push_back(NULL);
 
+            // This may not be necessary
             sfs.push_back(vector<SamplFactory>());
             sfs.back().push_back(SamplFactory(m_efac, aggressivepruning));
-            SamplFactory &sf = sfs.back().back(); // may be needless now?
+            SamplFactory &sf = sfs.back().back();
 
             learnedExprs.push_back(ExprSet());
 
@@ -1706,6 +1467,7 @@ namespace ufo
                 invarVarsShort[invNumber].push_back(var);
             }
 
+            // This may not be necessary
             arrCands.push_back(ExprSet());
             arrAccessVars.push_back(ExprVector());
             arrIterRanges.push_back(ExprSet());
@@ -1844,8 +1606,7 @@ namespace ufo
             {
                 if (dstNum < 0)
                 {
-                    if (printLog >= 3)
-                        outs() << "      Trivially true since " << hr.dstRelation << " is not initialized\n";
+                    DLOG(3) << "      Trivially true since " << hr.dstRelation << " is not initialized\n";
                     return false;
                 }
                 if (checkAll && annotations[dstNum].empty())
@@ -1856,11 +1617,8 @@ namespace ufo
             if (!hr.isFact)
             {
                 const ExprVector &canonicalSrc = ruleManager.invVars[hr.srcRelation];
-                if (printLog >= 5)
-                {
-                    outs() << "checkCHC2: srcVars size=" << hr.srcVars.size()
-                           << " canonicalSrc size=" << canonicalSrc.size() << "\n";
-                }
+                DLOG(5) << "checkCHC2: srcVars size=" << hr.srcVars.size()
+                        << " canonicalSrc size=" << canonicalSrc.size() << "\n";
                 // Only substitute if sizes agree
                 if (canonicalSrc.size() == hr.srcVars.size())
                 {
@@ -1875,19 +1633,15 @@ namespace ufo
                 }
                 else
                 {
-                    if (printLog >= 2)
-                        outs() << "Warning: skipping src substitution due to size mismatch ("
-                               << invarVarsShort[srcNum].size() << " vs " << hr.srcVars.size() << ")\n";
+                    DLOG(2) << "Warning: skipping src substitution due to size mismatch ("
+                            << invarVarsShort[srcNum].size() << " vs " << hr.srcVars.size() << ")\n";
                 }
             }
             if (!hr.isQuery)
             {
                 const ExprVector &canonicalDst = ruleManager.invVars[hr.dstRelation];
-                if (printLog >= 5)
-                {
-                    outs() << "checkCHC2: dstVars size=" << hr.dstVars.size()
-                           << " canonicalDst size=" << canonicalDst.size() << "\n";
-                }
+                DLOG(5) << "checkCHC2: dstVars size=" << hr.dstVars.size()
+                        << " canonicalDst size=" << canonicalDst.size() << "\n";
                 if (invarVarsShort[dstNum].size() == hr.dstVars.size())
                 {
                     ExprSet lms = learnedExprs[dstNum];
@@ -1907,7 +1661,7 @@ namespace ufo
             // Uses EZ3's built-in serializer (Z3_PRINT_SMTLIB2_COMPLIANT mode)
             // so that variable declarations carry their actual sorts and
             // all expressions are printed in proper S-expression form.
-            if (printLog >= 5)
+            DLOG_IF(5)
             {
                 static int queryCount = 0;
                 std::string filename = std::string(FREQHORN_SOURCE_DIR) + "/debug_queries/freqhorn_query_" + std::to_string(queryCount++) + ".smt2";
@@ -1943,7 +1697,7 @@ namespace ufo
                     // Restore decimal printing
                     Z3_global_param_set("pp.decimal", "true");
 
-                    if (printLog >= 5)
+                    DLOG_IF(5)
                     {
                         outs() << "Dumped SMT-LIB2 query to " << filename << "\n";
                     }
@@ -1989,7 +1743,7 @@ namespace ufo
                                    std::chrono::steady_clock::now() - startTime)
                                    .count();
 
-                if (printLog >= 3)
+                DLOG_IF(3)
                 {
                     std::cout << "checkCHC2: QF_NRA solved in " << elapsed << "ms\n";
                 }
@@ -2006,7 +1760,7 @@ namespace ufo
                             eqs.push_back(mk<EQ>(v, val));
                     }
                     Expr modelExpr = conjoin(eqs, m_efac);
-                    if (printLog >= 5)
+                    DLOG_IF(5)
                     {
                         outs() << "Model: " << modelExpr << "\n";
                     }
@@ -2014,11 +1768,13 @@ namespace ufo
             }
             catch (const std::exception &e)
             {
-                if (printLog >= 2)
+                DLOG_IF(2)
+                {
                     std::cout << "checkCHC2: QF_NRA solver exception: " << e.what()
                               << ", falling back to default solver\n";
+                }
                 sat = u.isSat(exprs);
-                if (printLog >= 5)
+                DLOG_IF(5)
                 {
                     if (sat)
                         std::cout << "checkCHC2 result: SAT\n";
@@ -2027,10 +1783,13 @@ namespace ufo
                     else
                         std::cout << "checkCHC2 result: UNKNOWN\n";
                 }
-                if (sat && printLog >= 5)
+                if (sat)
                 {
-                    outs() << "Expressions" << conjoin(exprs, m_efac) << "\n";
-                    outs() << u.getModel() << "\n";
+                    DLOG_IF(5)
+                    {
+                        outs() << "Expressions" << conjoin(exprs, m_efac) << "\n";
+                        outs() << u.getModel() << "\n";
+                    }
                 }
             }
             return sat;
@@ -2038,7 +1797,7 @@ namespace ufo
 
         boost::tribool checkFact(int i, map<int, ExprVector> &annotations)
         {
-            if (printLog >= 6)
+            DLOG_IF(6)
             {
                 outs() << "Checking fact...\n";
             }
@@ -2047,7 +1806,7 @@ namespace ufo
 
         boost::tribool checkConsecution(int i, map<int, ExprVector> &annotations)
         {
-            if (printLog >= 6)
+            DLOG_IF(6)
             {
                 outs() << "Checking consecution...\n";
             }
@@ -2056,7 +1815,7 @@ namespace ufo
 
         boost::tribool checkQuery(int i, map<int, ExprVector> &annotations)
         {
-            if (printLog >= 6)
+            DLOG_IF(6)
             {
                 outs() << "Checking query...\n";
             }
@@ -2134,21 +1893,6 @@ namespace ufo
             }
         }
 
-        void insertCounter(int inv)
-        {
-            if (printLog >= 3)
-                outs() << "setUpCounters\n";
-            assert(inv < invNumber);
-            Expr new_name = mkTerm<string>("_i" + to_string(0), m_efac);
-            Expr var = bind::realConst(new_name);
-            auxVars[inv].push_back(var);
-            new_name = mkTerm<string>("_i" + to_string(0) + "p", m_efac);
-            var = bind::realConst(new_name);
-            auxVarsPr[inv].push_back(var);
-            Expr indexZero = mk<EQ>(auxVars[inv][0], mkTerm(mpq_class("0"), m_efac));
-            Expr indexInc = mk<EQ>(auxVarsPr[inv][0], mk<PLUS>(auxVars[inv][0], mkTerm(mpq_class("1"), m_efac)));
-        }
-
         Expr addRoot(int i, std::string rootVal, size_t rootCount, EZ3 &z3, std::vector<std::string> sqrts = std::vector<std::string>())
         {
             /* TODO:
@@ -2163,10 +1907,7 @@ namespace ufo
             Expr rootNamePrimedExpr = mkTerm<string>(rootBaseName + "'", m_efac);
             Expr myRealRoot = bind::realConst(rootNameUnprimedExpr);
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
-            if (printLog >= 5)
-            {
-                outs() << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
-            }
+            DLOG(5) << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
 
             Expr myRootUpdate = str_to_expr(rootVal, sqrts);
 
@@ -2182,17 +1923,14 @@ namespace ufo
             {
                 Expr left = myRootUpdate->left();
                 Expr right = myRootUpdate->right();
-                if (printLog >= 5)
+                DLOG_IF(5)
                 {
                     outs() << "Root Type: " << typeid(myRootUpdate->op()).name() << "\n";
                     outs() << "Numerator Type: " << typeid(left->op()).name() << "\n";
                     outs() << "Denominator Type: " << typeid(right->op()).name() << "\n";
                 }
             }
-            if (printLog >= 3)
-            {
-                outs() << "Root update expression: " << myRootUpdate << "\n";
-            }
+            DLOG(3) << "Root update expression: " << myRootUpdate << "\n";
 
             Expr updateConstraint = mk<EQ>(myRealRootPrime, mk<MULT>(myRealRoot, myRootUpdate));
             invarVarsShort[i].push_back(myRealRoot);
@@ -2207,12 +1945,10 @@ namespace ufo
                 if (hr.isFact)
                 { // Ensure it's actually a fact
                     // Add to destination variables
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealRoot << " to source variables of fact: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealRoot << " to source variables of fact: " << hr.dstRelation << "\n";
                     hr.dstVars.push_back(myRealRootPrime);
 
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealRootPrime << " to destination variables of fact: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealRootPrime << " to destination variables of fact: " << hr.dstRelation << "\n";
                     // Add constraint to body: _my_real_counter_prime = 0.0
                     ExprSet bodyConjuncts;
                     getConj(hr.body, bodyConjuncts); // Get existing conjuncts
@@ -2242,13 +1978,11 @@ namespace ufo
                 // --- Modify the Transition Rule ---
                 if (hr.isInductive || (!hr.isFact && !hr.isQuery))
                 {
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealRoot << " to source variables of transition rule: " << hr.srcRelation << "\n";
+                    DLOG(3) << "Adding " << myRealRoot << " to source variables of transition rule: " << hr.srcRelation << "\n";
 
                     hr.srcVars.push_back(myRealRoot);
 
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealRootPrime << " to destination variables of transition rule: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealRootPrime << " to destination variables of transition rule: " << hr.dstRelation << "\n";
                     hr.dstVars.push_back(myRealRootPrime);
 
                     // Add constraint to body: _my_real_root_prime = _my_real_root * rootUpdate
@@ -2286,8 +2020,7 @@ namespace ufo
                 // --- Modify the Query Rule ---
                 if (hr.isQuery)
                 {
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealRoot << " to source variables of query rule: " << hr.srcRelation << "\n";
+                    DLOG(3) << "Adding " << myRealRoot << " to source variables of query rule: " << hr.srcRelation << "\n";
                     // Add to source variables (inputs to the query condition)
                     hr.srcVars.push_back(myRealRoot);
 
@@ -2343,12 +2076,10 @@ namespace ufo
                 if (hr.isFact)
                 { // Ensure it's actually a fact
                     // Add to destination variables
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealCounter << " to source variables of fact: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealCounter << " to source variables of fact: " << hr.dstRelation << "\n";
                     hr.dstVars.push_back(myRealCounterPrime);
 
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealCounterPrime << " to destination variables of fact: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealCounterPrime << " to destination variables of fact: " << hr.dstRelation << "\n";
                     // Add constraint to body: _my_real_counter_prime = 0.0
                     ExprSet bodyConjuncts;
                     getConj(hr.body, bodyConjuncts); // Get existing conjuncts
@@ -2377,13 +2108,11 @@ namespace ufo
                 // --- Modify the Transition Rule ---
                 if (hr.isInductive || (!hr.isFact && !hr.isQuery))
                 {
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealCounter << " to source variables of transition rule: " << hr.srcRelation << "\n";
+                    DLOG(3) << "Adding " << myRealCounter << " to source variables of transition rule: " << hr.srcRelation << "\n";
 
                     hr.srcVars.push_back(myRealCounter);
 
-                    if (printLog >= 3)
-                        outs() << "Adding " << myRealCounterPrime << " to destination variables of transition rule: " << hr.dstRelation << "\n";
+                    DLOG(3) << "Adding " << myRealCounterPrime << " to destination variables of transition rule: " << hr.dstRelation << "\n";
                     hr.dstVars.push_back(myRealCounterPrime);
 
                     // Add constraint to body: _my_real_counter_prime = _my_real_counter + 1.0
@@ -2421,8 +2150,7 @@ namespace ufo
                 // --- Modify the Query Rule ---
                 if (hr.isQuery)
                 {
-                    if (this->printLog >= 3)
-                        outs() << "Adding " << myRealCounter << " to source variables of query rule: " << hr.srcRelation << "\n";
+                    DLOG(3) << "Adding " << myRealCounter << " to source variables of query rule: " << hr.srcRelation << "\n";
                     // Add to source variables (inputs to the query condition)
                     hr.srcVars.push_back(myRealCounter);
 
@@ -2514,24 +2242,6 @@ namespace ufo
             return call;
         }
 
-        // Helper: Extract numeric value from special root variable names like "sqrt17"
-        // Returns empty string if not a special root variable
-        std::optional<std::string> extractRootValue2(const std::string &varName)
-        {
-            // Pattern: "sqrt<number>" -> extract <number>
-            if (varName.substr(0, 4) == "sqrt" && varName.size() > 4)
-            {
-                std::string numStr = varName.substr(4); // extract after "sqrt"
-                // Check if remaining characters are all digits
-                if (std::all_of(numStr.begin(), numStr.end(), ::isdigit))
-                {
-                    return numStr;
-                }
-            }
-            // Add more patterns as needed: "cbrt<number>", etc.
-            return std::nullopt;
-        }
-
         // Function to find all instances
         std::vector<std::string> extractRootValue(const std::string &input)
         {
@@ -2600,10 +2310,7 @@ namespace ufo
             }
             catch (const std::exception &e)
             {
-                if (this->printLog >= 2)
-                {
-                    outs() << "Warning: Could not create root constraint for " << rootValue << "\n";
-                }
+                DLOG(2) << "Warning: Could not create root constraint for " << rootValue << "\n";
                 return mk<TRUE>(m_efac);
             }
         }
@@ -2640,10 +2347,7 @@ namespace ufo
 
                             if (rootValueOpt.size() != 0)
                             {
-                                if (this->printLog >= 3)
-                                {
-                                    outs() << "Adding constraint for special root: " << baseStr << "\n";
-                                }
+                                DLOG(3) << "Adding constraint for special root: " << baseStr << "\n";
 
                                 for (auto r : rootValueOpt)
                                 {
@@ -2669,10 +2373,11 @@ namespace ufo
                             Expr rootExpr = addRoot(i, baseStr, rootCount++, z3, rootValueOpt);
                             rootMap[baseStr] = rootExpr;
                         }
-                        else if (this->printLog >= 3)
-                        {
-                            outs() << baseStr << " was already in the map\n";
-                        }
+                        else
+                            DLOG_IF(3)
+                            {
+                                outs() << baseStr << " was already in the map\n";
+                            }
                     }
                 }
             }
@@ -2699,10 +2404,7 @@ namespace ufo
                     if (hr.isFact)
                     {
                         hr.body = conjoin(bodyConjuncts, m_efac);
-                        if (this->printLog >= 3)
-                        {
-                            outs() << "Updated fact rule body with root constraints\n";
-                        }
+                        DLOG(3) << "Updated fact rule body with root constraints\n";
                         break;
                     }
                 }
@@ -2735,9 +2437,8 @@ namespace ufo
                 if (alreadyInRM)
                     continue;
 
-                if (printLog >= 3)
-                    outs() << "Registering sqrt variable " << fullName
-                           << " in CHC rules and ruleManager for invariant #" << i << "\n";
+                DLOG(3) << "Registering sqrt variable " << fullName
+                        << " in CHC rules and ruleManager for invariant #" << i << "\n";
 
                 // Add to invarVarsShort[i] — must happen HERE, after all _r_N roots,
                 // so the position matches the dstVars/srcVars push below.
@@ -2766,9 +2467,8 @@ namespace ufo
                         bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
                         hr.body = conjoin(bodyConj, m_efac);
 
-                        if (printLog >= 3)
-                            outs() << "Adding " << primedName
-                                   << " to dstVars of fact rule\n";
+                        DLOG(3) << "Adding " << primedName
+                                << " to dstVars of fact rule\n";
                     }
 
                     if (hr.isInductive || (!hr.isFact && !hr.isQuery))
@@ -2782,18 +2482,16 @@ namespace ufo
                         bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
                         hr.body = conjoin(bodyConj, m_efac);
 
-                        if (printLog >= 3)
-                            outs() << "Adding " << fullName << " / " << primedName
-                                   << " to srcVars/dstVars of transition rule\n";
+                        DLOG(3) << "Adding " << fullName << " / " << primedName
+                                << " to srcVars/dstVars of transition rule\n";
                     }
 
                     if (hr.isQuery && srcNum == i)
                     {
                         hr.srcVars.push_back(sqrtVar);
 
-                        if (printLog >= 3)
-                            outs() << "Adding " << fullName
-                                   << " to srcVars of query rule\n";
+                        DLOG(3) << "Adding " << fullName
+                                << " to srcVars of query rule\n";
                     }
                 }
             }
@@ -2867,9 +2565,8 @@ namespace ufo
                 else
                 {
                     // Unknown variable — replace with index as fallback
-                    if (printLog >= 2)
-                        outs() << "Warning: unknown variable '" << vname
-                               << "' in coefficient, replacing with index\n";
+                    DLOG(2) << "Warning: unknown variable '" << vname
+                            << "' in coefficient, replacing with index\n";
                     replacements[var] = indexVar;
                 }
             }
@@ -2884,20 +2581,15 @@ namespace ufo
 
             if (vars.empty())
             {
-                if (printLog >= 5)
-                {
-                    outs() << "Warning: No variables found in expression\n";
-                }
-
+                DLOG_IF(5)
+                outs() << "Warning: No variables found in expression\n";
                 return expr;
             }
 
             if (vars.size() > 1)
             {
-                if (printLog >= 5)
-                {
-                    outs() << "Warning: Expression has multiple variables, replacing all\n";
-                }
+                DLOG_IF(5)
+                outs() << "Warning: Expression has multiple variables, replacing all\n";
             }
 
             ExprMap replacements;
@@ -3024,10 +2716,7 @@ namespace ufo
 
         double expr_to_double(Expr expr)
         {
-            if (this->printLog >= 3)
-            {
-                outs() << "Simplified expression: " << *expr << "\n";
-            }
+            DLOG(3) << "Simplified expression: " << *expr << "\n";
             // Leaf: integer
             if (isOpX<MPZ>(expr))
             {
@@ -3083,10 +2772,8 @@ namespace ufo
             }
             else
             {
-                if (this->printLog >= 3)
-                {
-                    outs() << "Warning: Expression is not a numeric constant\n";
-                }
+                DLOG_IF(3)
+                outs() << "Warning: Expression is not a numeric constant\n";
                 return 0.0;
             }
         }
@@ -3125,8 +2812,7 @@ namespace ufo
             return test;
         }
 
-        void printStatistics(const std::vector<std::chrono::duration<double>> &synthTime,
-                             const std::vector<std::size_t> &attemptCount)
+        void printStatistics(const std::vector<std::chrono::duration<double>> &synthTime, std::chrono::duration<double> polarTime)
         {
             auto meanOf = [](const std::vector<double> &vals) -> double
             {
@@ -3165,19 +2851,19 @@ namespace ufo
 
             auto makeStats = [&](const std::vector<double> &vals) -> nlohmann::json
             {
-                std::vector<double> d1 = firstDerivativeOf(vals);
-                std::vector<double> d2 = secondDerivativeOf(vals);
+                // std::vector<double> d1 = firstDerivativeOf(vals);
+                // std::vector<double> d2 = secondDerivativeOf(vals);
 
                 nlohmann::json stats;
                 stats["samples"] = vals.size();
                 stats["mean"] = meanOf(vals);
-                stats["median"] = medianOf(vals);
-                stats["first_derivative_samples"] = d1.size();
-                stats["first_derivative_mean"] = meanOf(d1);
-                stats["first_derivative_median"] = medianOf(d1);
-                stats["second_derivative_samples"] = d2.size();
-                stats["second_derivative_mean"] = meanOf(d2);
-                stats["second_derivative_median"] = medianOf(d2);
+                // stats["median"] = medianOf(vals);
+                // stats["first_derivative_samples"] = d1.size();
+                // stats["first_derivative_mean"] = meanOf(d1);
+                // stats["first_derivative_median"] = medianOf(d1);
+                // stats["second_derivative_samples"] = d2.size();
+                // stats["second_derivative_mean"] = meanOf(d2);
+                // stats["second_derivative_median"] = medianOf(d2);
                 return stats;
             };
 
@@ -3186,14 +2872,15 @@ namespace ufo
             for (const auto &d : synthTime)
                 synthSeconds.push_back(d.count());
 
-            std::vector<double> attemptsAsDouble;
-            attemptsAsDouble.reserve(attemptCount.size());
-            for (auto a : attemptCount)
-                attemptsAsDouble.push_back(static_cast<double>(a));
+            // std::vector<double> attemptsAsDouble;
+            // attemptsAsDouble.reserve(attemptCount.size());
+            // for (auto a : attemptCount)
+            // attemptsAsDouble.push_back(static_cast<double>(a));
 
             nlohmann::json payload;
             payload["synth_time_seconds"] = makeStats(synthSeconds);
-            payload["attempt_count"] = makeStats(attemptsAsDouble);
+            payload["polar_time"] = polarTime.count();
+            // payload["attempt_count"] = makeStats(attemptsAsDouble);
 
             outs() << payload.dump() << "\n";
         }
@@ -3208,8 +2895,6 @@ namespace ufo
         CHCs ruleManager(m_efac, z3, debug - 2);
         auto res = ruleManager.parse(smt, doElim, doArithm);
         RndLearnerV5 ds(m_efac, z3, ruleManager, to, debug);
-        // ds.z3_testing();
-        // return;
 
         for (int i = 0; i < ruleManager.cycles.size(); i++)
         {
@@ -3228,7 +2913,7 @@ namespace ufo
          */
 
         ds.reflipSimpleEqualities(); // Reflip simple equalities in CHCs
-        if (debug >= 3)
+        DLOGD_IF(3)
         {
             ruleManager.print(true);
         }
@@ -3241,7 +2926,11 @@ namespace ufo
          * function
          */
         std::string polarCommand = ds.getCallToPolar(i);
+        auto polarBegin{std::chrono::steady_clock::now()};
         CommandResult polarResult = exec(polarCommand.c_str());
+        auto polarEnd{std::chrono::steady_clock::now()};
+        auto polarTime = polarEnd - polarBegin;
+
         std::string output_test = polarResult.output;
 
         if (polarResult.signaled || polarResult.exitCode != 0)
@@ -3318,7 +3007,7 @@ namespace ufo
         Expr index = ds.indices[i];
         Expr oneReal = mkTerm(mpq_class("1"), m_efac);
         Expr zeroReal = mkTerm(mpq_class("0"), m_efac);
-        if (debug >= 5)
+        DLOGD_IF(5)
         {
             pprint(symbolicClosedForms);
         }
@@ -3350,9 +3039,9 @@ namespace ufo
         Expr firstInv = conjoin(lemmasSet, m_efac);
 
         std::vector<std::chrono::duration<double>> synthTime;
-        std::vector<std::size_t> attemptCount;
+        // std::vector<std::size_t> attemptCount;
 
-        if (debug >= 3)
+        DLOGD_IF(3)
         {
             ruleManager.print(true);
             outs() << firstInv << "\n";
@@ -3387,7 +3076,7 @@ namespace ufo
                     ds.generateCertificate(certificatePath, i, annotations);
                 }
 
-                ds.printStatistics(synthTime, attemptCount);
+                ds.printStatistics(synthTime, polarTime);
 
                 exit(EXIT_SUCCESS);
             }
@@ -3399,11 +3088,11 @@ namespace ufo
             // This could be caused by Sqrt Approximation. Future work can be done to
             // fix this.
 
-            if (debug >= 5)
+            DLOGD_IF(5)
             {
                 outs() << "initial invariant did not pass initiation and consecution...\n";
             }
-            ds.printStatistics(synthTime, attemptCount);
+            ds.printStatistics(synthTime, polarTime);
             outs() << "unknown\n";
 
             return;
@@ -3489,7 +3178,7 @@ namespace ufo
                 // _FH_0_INIT whose numeric value is not statically known).
                 // Skip it in the phase-bound loop to avoid calling an
                 // uninitialised phaseLemmas dispatch entry.
-                if (debug >= 3)
+                DLOGD_IF(3)
                 {
                     outs() << "Unsupported/symbolic root (skipped in phase analysis): " << n << "\n";
                 }
@@ -3501,9 +3190,8 @@ namespace ufo
 
         if (symbolsToKeep.empty())
         {
-            if (debug >= 3)
-                outs() << "No non-trivial roots found for invariant " << i
-                       << "; skipping phase-bound loop.\n";
+            DLOGD(3) << "No non-trivial roots found for invariant " << i
+                     << "; skipping phase-bound loop.\n";
             outs() << "unknown\n";
             return;
         }
@@ -3512,7 +3200,7 @@ namespace ufo
         map<int, ExprVector> verifiedLemmas;
 
         synthTime.reserve(max_iterations * 2);
-        attemptCount.reserve(max_iterations * 2);
+        // attemptCount.reserve(max_iterations * 2);
         std::size_t count = 0;
         for (size_t j = 1; j < max_iterations; j++)
         {
@@ -3522,9 +3210,12 @@ namespace ufo
             {
                 Expr n, s;
                 boost::tie(n, s) = tuple;
+                DLOGD(3) << "\t\tIteration: " << j << "\n";
 
                 // --- Upper bound ---
                 auto begin{std::chrono::steady_clock::now()};
+                auto end{begin};
+                std::chrono::duration<double> elapsed_seconds{};
                 Expr upperBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
                 Expr cond = phaseCond[s].max(itr);
                 Expr bnd = mk<LEQ>(s, upperBound);
@@ -3548,14 +3239,10 @@ namespace ufo
                 }
                 Expr upperLemma = newLemma;
                 previousUpper[s] = upperBound;
-                auto end{std::chrono::steady_clock::now()};
-                std::chrono::duration<double> elapsed_seconds{end - begin};
-                synthTime.push_back(elapsed_seconds);
-                attemptCount.push_back(count);
                 count = 0;
 
                 // lower-bound
-                begin = std::chrono::steady_clock::now();
+                // begin = std::chrono::steady_clock::now();
                 Expr lowerBound;
                 if (hasDeviated.count(s) > 0)
                 {
@@ -3587,12 +3274,6 @@ namespace ufo
                     }
                 }
 
-                end = std::chrono::steady_clock::now();
-                elapsed_seconds = end - begin;
-                synthTime.push_back(elapsed_seconds);
-                attemptCount.push_back(count);
-                count = 0;
-
                 // Check safety
                 {
                     boost::tribool qResult = ds.checkQuery(i, annotations);
@@ -3614,22 +3295,23 @@ namespace ufo
                             {
                                 ds.generateCertificate(certificatePath, i, annotations);
                             }
-                            ds.printStatistics(synthTime, attemptCount);
+                            end = std::chrono::steady_clock::now();
+                            elapsed_seconds = end - begin;
+                            synthTime.push_back(elapsed_seconds);
+                            ds.printStatistics(synthTime, polarTime);
                             exit(EXIT_SUCCESS);
                         }
                         else
                         {
-                            if (debug >= 5)
-                                outs() << "didn't pass initiation...\n";
-                            ds.printStatistics(synthTime, attemptCount);
+                            DLOGD(5) << "didn't pass initiation...\n";
+                            ds.printStatistics(synthTime, polarTime);
                             outs() << "unknown\n";
                             exit(EXIT_FAILURE);
                         }
                     }
                     else if (boost::indeterminate(qResult))
                     {
-                        if (debug >= 3)
-                            outs() << "Warning: checkQuery returned UNKNOWN at index " << j << "\n";
+                        DLOGD(3) << "Warning: checkQuery returned UNKNOWN at index " << j << "\n";
                     }
                 }
 
@@ -3649,10 +3331,14 @@ namespace ufo
                 }
                 ds.learnedExprs[i].insert(mk<IMPL>(lemma, resultant));
                 previousLower[s] = lowerBound;
+
+                end = std::chrono::steady_clock::now();
+                elapsed_seconds = end - begin;
+                synthTime.push_back(elapsed_seconds);
             }
         }
 
-        ds.printStatistics(synthTime, attemptCount);
+        ds.printStatistics(synthTime, polarTime);
         outs() << "Analysis inconclusive after " << max_iterations << " iterations.\n";
         exit(EXIT_SUCCESS);
     }

@@ -1,0 +1,89 @@
+\section{Counterexample Mining}
+\label{sec:cegar}
+
+The flattening and refinement process discussed in Sections \ref{sec:flattening} and \ref{sec:refinement} do not support finding results for programs which are \textit{unsafe}. This section seeks to develop a simple procedure which, when run in tandem with the other procedures, can leverage the closed forms to find meaningful counter-examples to safety. In this section, we first discuss the basic idea of delta-satisfiability, and it can be useful for us. We then go over a simple procedure utilizing delta-satisfiability to find a counter-example. We discuss cases where a maximum n, discussed in Section \ref{sec:dominant}, does and does not exist, and how this changes the procedure.
+
+\subsection{$\delta$-Decision Procedures}
+As well, for a check to make sure that the closed forms actually imply that the safety property holds, it may be fruitful to implement a way to call the dReal SMT Solver \cite{gao2013dreal} check to see if by itself it passes the safety. Due to the nature of dReal, it wouldn't be able to show whether consecution would hold, but it is an interesting question whether, if safety holds, whether a given invariant could be reformulated to show consecution.
+
+Okay, let us be more specific. If it passes initiation and safety using dReal, but doesn't pass consecution, that doesn't mean it wouldn't pass consecution for another SMT Solver. The dReal tool is special in the sense that it does approximations around a given interval, and so for consecution it is not uncommon for this interval approximation to lead to spurious failures (the invariant does hold for consecution, but the tool utilized cannot check that). In many ways, the technique described in this thesis is one that seeks to flatten the invariant into a domain that is decidable by a wide array of solvers (reducing it to LRA). So an interesting question is how can we know for sure that if it does prove safety, that the flattening will not lose information such that it may never actually prove safety after being flattened from NRA to LRA. We believe a proof is required to show this. Also, with this in mind, it is probably not a bad idea to check consecution and initiation with Spacer and safety with dReal, and that it proves everything is safe. But, if someone actually wants an invariant that could be tested, it would take longer. This may become tricky when applied to periodic linear loops, because dReal does not have native support for complex numbers. A process for reformulating the closed form in a way that is equivalent may be sufficient, but further work is necessary.
+
+One topic less explored up to this point is how, for a given safety problem, how to check whether the property is false. This section will explore this question. In brief, the approach is to write out the closed forms of all program variables and to check to see whether, given such closed forms, there is a loop counter such that the property does not hold. This is initially done using dReal, which utilizes delta-satisfiability. This means that the value of the output could either be a true result, or the actual result is mistaken. So, if dReal could give inaccurate results, what is the value?
+
+The idea works like this: Write the formula in such a way that it can be interpreted by dReal. Check to see if there is a satisfying solution for n. If there is, then it must be checked to see if it is a genuine example of a counter-example (this is known as a spurious counter-example). This can be done by replacing all instances of n with the counter-example, and then check to see if it is still UNSAT with Z3. If Z3 concurs that it is a counter-example to safety, it has been proven unsafe, and the tool will output the loop counter where safety has been broken, and if the loop included intervals, will give interpretations of the initial value of the loop. If the integer [[n]]spurious, then the formula will be updated to not include [n-0.5,n+0.5] by dReal for the loop counter. This approach is based upon a Counter-Example Guided Abstraction Refinement (CEGAR) style of abstraction refinement, where instead of the abstraction comes from the decision procedure and not inherent to the representation of the state space.
+
+Now, this procedure will converge because there will be a max N set as the maximum for the analysis. This can be done because of the property of the Dominant Root of a closed form. The basic idea is that, for a given formula with a set of roots, the root with the largest magnitude will decide the overall nature of the system. This can be computed as this formula (provide formula). At this point, the nature will stabilize, and if an inequality is true for that value of N, then it will remain true for all values greater than N. Thus, a safety bound is set (120\% of N) only values between 0 and this number are checked. This leads to a procedure which is complete in that if there is a true counter-example to safety, it would appear.
+
+On top of this technique, a further technique is possible where bounded model checking procedures such as Transition Power Abstraction (TPA) can be applied to find safety since, unlike in other BMC procedures on these systems, it would be known what a maximum value would be. It would be considering whether there would be ways to compute a maximum for PWA systems, since TPA can apply to them. What would this look like?
+
+So, there are already ways to find the closed forms of all the cells of a PWA system. So, from what we have looked at, there may be a way to estimate an upper bound for N even for PWA's, but we don't know if it would work for all PWA's. Neat. This may be an interesting paper as it connects to something like TPA. Maybe something like "while TPA is running, in the background see if you can calculate an upper bound". If it can't do it using the other technique, maybe just finding the Recurrence Diameter would be okay. Maybe even calculating all three at once, and seeing which one works faster.
+
+I'm going to have to implement a complex version of this, don't I?
+
+That's fine, it shouldn't be too much work. Okay, so we reasoned in the past that we could run dReal and it would give me a value for the loop counter, and that value could be used to set the maximum bound for the loop. Why was that?
+
+Okay, so we think we vaguely get the idea: if we have a setup where a property eventual becomes true, such as
+\begin{equation*}
+    |x| < 0.001
+\end{equation*}
+then you must generate lemmas until that property holds. we think we framed it like
+\begin{equation*}
+    \exists n_{max} .\forall n . n > n_{max} \implies \phi(n)
+\end{equation*}
+The issue with this way of framing it is that it may be too tethered to the particular problem we was looking at. It is true that there are times when, especially for something like a disjunction, you need to generate a certain number of lemmas to refine the exponential relationships. Also, we want to prove something like "because these closed forms perfectly describe linear loops, the domain of polynomial exponential equalities are expressive to prove any loop in the system."
+
+I think that we may not use "dReal" in the manner we originally planned, and instead just have it run infinitely. The issue is that, wouldn't there be a chance that, with widening, it could lead to setups where we have abstracted too much, and now the system runs indefinitely. Maybe just computing the Dominance Threshold would be enough to have a maximum. Also, since we think it will matter more to have some extra steps if the value of N is small compared to when it is very big, to compute the value for what the new maximum will be with this function
+\begin{equation*}
+    g(N) = \frac{0.19}{N + 1} + 1.01 \quad (\text{for } N > -1)
+\end{equation*}
+
+Here is an approach
+\begin{enumerate}
+    \item Translate the closed forms into a formula and properties supported by dReal
+    \item Check to see if there is a maximum N as described above and set it to $m$
+    \begin{enumerate}
+        \item If so, set the bound for n to be $0 \leq n \leq \frac{0.19}{N + 1} + 1.01 \quad (\text{for } N > -1)$
+        \item If not, set it to $N^*$ and continue to increase it incrementally. In this case, this loop will run indefinitely unless Z3 finds a counter-example.
+    \end{enumerate}
+    \item Query dReal to check to see if the property is UNSAT
+    \begin{enumerate}
+        \item If it is UNSAT but $m=N^*$, increase $N^*$ by $\epsilon$ and repeat step 3
+        \item If it is UNSAT and $m \not =N^*$, return SAFE and continue with main algorithm
+        \item If SAT, continue to next step
+    \end{enumerate}
+    \item Get the model of n, $I[n]$, and round it to the nearest integer, calling it $n_r$
+    \item Rewrite your query to replace all instances of n with the value from step 4 and add the constraints for every init variable to be within the bounds of the solution.
+    \item Feed this query to Z3 and see if it is SAT.
+    \begin{enumerate}
+        \item If it is SAT, return UNSAFE
+        \item If it is UNSAT, continue.
+    \end{enumerate}
+    \item Generate the interpolant $n_r - 0.5 \leq n \leq n_r + 0.5$ and conjoin it to the lemma.
+\end{enumerate}
+
+As an aside, dReal only supports reasoning when there are strict bounds placed on the variables. This means that there must be bounds set if a lack of safety is possible to find. But, we could also rethink this a little bit. Instead of just doing that, we could incrementally increase the bounds, or even not add the bounds when we feed it into Z3. For instance, if we get an UNSAT, maybe that's a sign to increase the bounds of the intervals by some amount.
+
+Here is one question. Are there any instances where, if you constrain the system for the initial values, will dReal ever miss values of n that are safe for the constraints provided to dReal but unsafe when unconstrained.
+
+\begin{example}
+    Let us imagine a that we constrained the system to look between $0 \leq n \leq 100$, and it is a simple system with two variables $x$ and $y$, but they both have no constraints.
+    \begin{equation*}
+        x: (-\infty, \infty)\quad y: (-\infty, \infty)
+    \end{equation*}
+    And let us say there is only 2 solutions found using dReal, $I: \{n \mapsto 4, \dots\}$ and $I: \{n \mapsto 67, \dots\}$. But, in order to use dReal, it had to make bounds for the variables:
+    \begin{equation*}
+        x: (-100, 100)\quad y: (-100, 100)
+    \end{equation*}
+    But, when checking the SAT models, we won't add bounds to the variables in the formulae. Now, this may lead to hanging from Z3, and there can be a timeout set so that if a timeout occurs, a simple interval could be implemented $-10^{15} < x < 10^{15}$, but the question we truly have is this: are there situations where, let's say for $n \mapsto 45$, there is a genuine counter-example to safety, but it isn't covered by the intervals given to dReal (at least initially). 
+\end{example}
+Of course, you can always extend them, but we want to see if there is any way to guide the search space such that we don't need to individually check every interpretation of n and feed it to Z3 without bounds to actually make sure we aren't missing anything. Can we say something like this
+\begin{postulate}
+    If there is a model $\mathcal{M}$ such that $\mathcal{M} \models \neg P$, then there is some solution generated by dReal that has a bound, blah blah blah.
+\end{postulate}
+No, this doesn't make that much sense. We are interested in some kind of "critical point" for the recurrence relations. Could we say something like "Based upon the closed form, if the property holds for this large interval for some init variable x, then it should hold for all values of x. Is there something about these closed forms that we can take advantage of.
+
+A boring approach that will likely end up being fairly slow is this: if you are using approximations, just increase the interval for both n and all the init values by 100. You will have to approximate the precision again for N, so fair warning. But, it won't accidentally miss any possible solutions in the process, which would be my worry. I'm not going to risk that, I'll just be slower. And hey, if you're giving unbounded intervals and what have you, we think you can live with something like that.
+
+\begin{remark}
+    To ensure that, in the realm of NRA, our models of n are close to the integers by some $\epsilon$, we use $\sin^2(n\pi)$.
+\end{remark}

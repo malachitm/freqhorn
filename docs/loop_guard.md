@@ -1,0 +1,3 @@
+# Feature 3: Loop Guards
+
+Right now, the tool only supports loops that do not include a loop guard. But, I want to develop a method that can support both proving properties inside the loop when the loop has a guard, and for proving properties for after the program exits the loop. I don't think this would be that burdensome, I would just need to make sure I can transfer this information into the Polar program.

@@ -1,0 +1,5 @@
+# Feature 4: Input Variable
+
+Let's say we wanted to represent a variable that could be any value between a minimum and maximum value. This is equivalent to an input variable u in LTI systems. In this case, how could we support this?
+
+Right now, the tool can support a constant being unknown at the beginning of a loop, but it being the case that the value always stays the same with each step of the loop. Now all that needs to be done is recreate that calculation. What I think will be necessary to have this variable be added to the phase lemmas so that what we are saying is (i > k) => (r < u*0.7), or something like that. This means that, if u could be between 0 and 1, then the values of each root at each point could vary more, and so there may be a point that the system may either be stable or unstable depending on the value of u at a given point, and so the mins and maxes should be reflective of this. 

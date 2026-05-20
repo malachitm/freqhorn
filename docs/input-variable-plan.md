@@ -4,37 +4,39 @@
 Support **bounded non-deterministic input variables** in CHCs, analogous to an LTI
 input `u_k`, where each step may choose a fresh value inside a bounded region.
 
-Chosen semantics for the first cut:
+Chosen semantics for the initial version:
 
 - **Worst-case** semantics, not expectation.
-- Inputs may have **independent interval bounds** and also **joint rational linear
-  constraints** (for example `u1 + u2 <= 1`).
 - Inputs are modeled as **fresh choices each iteration**, not fixed unknown
   constants.
-- If the resulting system is unstable and no finite bound is found, keep the current
-  behavior (timeout / no proof) rather than adding explicit instability reporting.
+- Final phase lemmas must contain **numeric bounds only**; raw per-step input
+  variables must not appear in the lemma body.
+- Supported input constraints are restricted to **state-independent interval bounds**
+  on each input variable.
+- If the resulting system is unstable and no finite numeric bound is found, keep the
+  current behavior (timeout / no proof) rather than adding explicit instability
+  reporting.
 
 This plan expands Feature 4 from `feature1_subtask_estimates.csv` into a tool-facing
-pipeline. Every Feature 4 CSV item is expanded further because each one has AI
-pessimistic estimate at least 3x the AI optimistic estimate.
+pipeline under those simplified assumptions.
 
 ---
 
 ## Design Decision
 
-Do **not** use POLAR distributions for the first cut.
+Do **not** use POLAR distributions in the initial version.
 
 Instead:
 
 1. Serialize each input variable to POLAR as a **symbolic parameter** so POLAR can
    return closed forms in terms of that symbol.
 2. Keep the actual **bounded non-determinism at the CHC layer**, where the inductive
-   rule body retains constraints such as `0 <= u'`, `u' <= 1`, or `u1' + u2' <= 1`.
-3. Compute a **sound worst-case bound** from the closed-form coefficients and inject
-   that bound back into the phase lemmas / root-bound generation.
+   rule body retains only interval-style constraints such as `0 <= u'` and `u' <= 1`.
+3. Compute a **sound numeric worst-case bound** from the closed-form coefficients and
+   inject that numeric bound back into the phase lemmas / root-bound generation.
 
-This is a partial reuse of the existing `_INIT` mechanism, not a direct reuse of all
-its CHC rewriting logic.
+No separate optimization engine is needed in the initial version. For interval-bounded
+inputs, worst-case values are obtained by endpoint reasoning on the coefficient sign.
 
 ---
 
@@ -76,21 +78,28 @@ This means the first engineering task is to split the existing mechanism into:
 
 ---
 
-## Supported Input Fragment (First Cut)
+## Supported Input Fragment (Initial Version)
 
-Support input variables whose inductive-step constraints are:
+Support input variables whose inductive-step constraints are interval bounds on the
+primed input variable, for example:
 
-- interval bounds on primed inputs, e.g. `0 <= u'`, `u' <= 1`,
-- joint rational linear constraints over primed inputs only, e.g. `u1' + u2' <= 1`,
-- optionally repeated in canonicalized `<=` / `>=` / equality forms.
+- `0 <= u'`
+- `u' <= 1`
+- `a <= u'` and `u' <= b`
 
-Out of scope for the first cut:
+where `a` and `b` are numeric constants or symbols that denote fixed constants across
+the run, such as algebraic-number variables from Feature 1.
+
+Out of scope for the initial version:
 
 - probabilistic distributions / expectations,
-- nonlinear joint constraints (e.g. `u1*u2 <= 1`),
+- joint constraints over multiple inputs (for example `u1 + u2 <= 1`),
+- nonlinear constraints,
 - input constraints mentioning loop-state variables (`u' <= x + 1`),
 - time-varying bounds depending on the iteration counter,
-- explicit instability diagnosis beyond existing timeout/no-proof behavior.
+- final lemmas that mention raw input variables.
+
+Reject unsupported input formats explicitly rather than weakening them.
 
 ---
 
@@ -112,10 +121,6 @@ parameters. A first-cut schema can be:
         "_FH_U_INPUT": {
           "bases": ["_r_0", "1.0"],
           "coeffs": ["...", "..."]
-        },
-        "_FH_V_INPUT": {
-          "bases": ["_r_1", "1.0"],
-          "coeffs": ["...", "..."]
         }
       }
     }
@@ -130,21 +135,23 @@ Interpretation:
 - The state value is reconstructed as:
   `state(n) = constant(n) + Σ_i c_i(n) * u_i`.
 
-This keeps the worst-case optimization problem small and explicit on the C++ side.
+The final C++ pipeline then eliminates each `u_i` by interval endpoint reasoning,
+producing a purely numeric upper and lower bound.
 
 ---
 
 ## Pipeline Overview
 
 1. Split the current `_INIT` mechanism into constant-init and input-parameter paths.
-2. Detect and classify input variables from the inductive CHC.
-3. Extract independent bounds and joint linear constraints.
+2. Detect and classify interval-bounded input variables from the inductive CHC.
+3. Extract state-independent interval bounds only.
 4. Serialize inputs to POLAR as symbolic parameters only.
 5. Extend the closed-form JSON with per-input coefficient decomposition.
-6. Compute sound worst-case bounds for independent and jointly constrained inputs.
-7. Generate CHC lemmas that combine homogeneous root bounds with input bounds.
+6. Compute sound numeric worst-case bounds by interval endpoint reasoning.
+7. Generate CHC lemmas that combine homogeneous root bounds with numeric input
+   bounds.
 8. Preserve bounded non-determinism in the actual CHC transition relation.
-9. Build a regression suite covering independent and joint-constraint inputs.
+9. Build a regression suite covering interval-bounded inputs.
 
 ---
 
@@ -174,15 +181,14 @@ A clear internal distinction between “fixed parameter” and “per-step bound
 
 ## Phase 1 — Detect and Classify Input Variables
 
-This phase expands CSV sub-task 1.
-
 ### 1A. Scan the inductive CHC for primed-input patterns
 
 Walk inductive-body conjuncts and detect variables that appear in bounded forms like:
 
 - `c1 <= u'`
 - `u' <= c2`
-- `A*u' + B*v' <= c`
+
+where `c1` and `c2` are constants or constant-like symbols.
 
 ### 1B. Distinguish true inputs from identity transitions
 
@@ -197,53 +203,42 @@ For each candidate input, record:
 - canonical variable name,
 - primed expression,
 - scalar lower/upper bounds when available,
-- whether it participates in a joint constraint block,
 - the POLAR parameter name that will stand in for it.
 
-### 1D. Reject mixed constraints in the first cut
+### 1D. Reject unsupported mixed constraints
 
-If a purported input constraint mentions both input variables and ordinary state
-variables, reject it for now. That is a different problem from bounded exogenous
-inputs.
+If a purported input constraint mentions loop-state variables or multiple distinct
+input variables in the same inequality, reject it in the initial version.
 
 ---
 
-## Phase 2 — Extract Independent and Joint Constraints
-
-This phase expands CSV sub-task 2.
+## Phase 2 — Extract State-Independent Interval Bounds
 
 ### 2A. Normalize inequalities
 
-Convert supported inequalities to a standard rational linear form:
+Convert supported inequalities into a canonical interval form for each input:
 
-`A * u <= b`
+`lower_i <= u_i' <= upper_i`
 
-where `u` is the vector of input variables for the current step.
+### 2B. Separate lower and upper evidence
 
-### 2B. Separate independent interval bounds
+Collect lower-bound and upper-bound conjuncts independently, then combine them into a
+single stored interval.
 
-When a constraint involves only one input variable, store it as a simple scalar
-interval bound.
+### 2C. Boundedness check
 
-### 2C. Build joint-constraint blocks
+Require every input used in the feature to have both a lower and an upper bound.
+If either side is missing, reject the feature for that CHC rather than guessing an
+infinite interval.
 
-When a constraint involves two or more inputs, group those inputs into a shared
-polytope block and build a rational matrix representation `A*u <= b`.
+### 2D. Constant-bound check
 
-### 2D. Boundedness check
-
-Require that every input participating in optimization has either:
-
-- explicit independent bounds, or
-- membership in a bounded joint polytope.
-
-If boundedness cannot be established syntactically, reject the feature for that CHC.
+Require the interval endpoints to be numeric constants or constant-like symbols.
+State-dependent bounds remain out of scope.
 
 ---
 
 ## Phase 3 — POLAR Parameterization Without CHC Const-ification
-
-This phase expands CSV sub-task 3 and part of CSV sub-task 7.
 
 ### 3A. Reuse naming, not rewriting
 
@@ -258,9 +253,9 @@ with their POLAR parameter names so POLAR returns closed forms in those symbols.
 
 ### 3C. Keep the original CHC variables untouched
 
-In the CHC, the input remains an ordinary program variable with bounded constraints
-in the inductive body. No auxiliary invariant variable is introduced merely to make
-POLAR happy.
+In the CHC, the input remains an ordinary program variable with bounded interval
+constraints in the inductive body. No auxiliary invariant variable is introduced
+merely to make POLAR happy.
 
 ### 3D. Guard against accidental materialization
 
@@ -271,8 +266,6 @@ up input-variable parameter names by mistake.
 
 ## Phase 4 — Emit Per-Input Coefficient Decomposition from POLAR
 
-This phase expands CSV sub-task 4.
-
 ### 4A. Affine-in-input decomposition
 
 In `closedforms2.py`, decompose each state closed form into:
@@ -280,8 +273,9 @@ In `closedforms2.py`, decompose each state closed form into:
 - input-independent constant part,
 - one coefficient expression per input variable.
 
-The first cut assumes the closed form is affine in the designated input parameters.
-If a higher-order term like `u1*u2` or `u^2` appears, reject it rather than guessing.
+The initial version assumes the closed form is affine in the designated input
+parameters. If a higher-order term like `u^2` appears, reject it rather than
+guessing.
 
 ### 4B. Extend the output JSON
 
@@ -294,27 +288,24 @@ closed forms so the C++ side can pass them through existing parsing/evaluation c
 
 ### 4D. Add decomposition validation examples
 
-Use a few small recurrences where the analytic solution is known, e.g.:
+Use a few small recurrences where the analytic solution is known, for example:
 
 - `x' = a*x + u`
-- `x' = a*x + b*u1 + c*u2`
-- `x' = a*x + u1 - u2`
+- `x' = a*x - u`
 
 ---
 
-## Phase 5 — Worst-Case Bound Engine
-
-This phase expands CSV sub-task 5 and is the highest-risk part of the feature.
+## Phase 5 — Numeric Worst-Case Bound Engine
 
 ### 5A. Coefficient-bound extraction
 
 For each coefficient function `c_i(n)`, build the symbolic/interval bound needed to
-optimize `Σ c_i(n) * u_i` soundly. Reuse existing root-bound infrastructure when
-possible rather than inventing a second bound engine.
+bound `c_i(n) * u_i` soundly. Reuse existing root-bound infrastructure when possible
+rather than inventing a second bound engine.
 
-### 5B. Independent-interval optimization
+### 5B. Interval endpoint reasoning
 
-When inputs are independently bounded, compute:
+When inputs are interval-bounded, compute:
 
 - upper bound by choosing `u_i = upper_i` if `c_i(n) >= 0`, else `lower_i`,
 - lower bound by choosing the opposite endpoint.
@@ -328,30 +319,15 @@ fallback:
 
 This is wider but safe.
 
-### 5D. Joint-constraint optimization
+### 5D. Numeric-only output rule
 
-For a joint constraint block `A*u <= b`, optimize `c(n)^T u` over the bounded
-polytope. First cut strategy:
-
-1. enumerate vertices for small dimensions,
-2. evaluate the objective at each vertex,
-3. keep the best value.
-
-If dimension grows too large, add a guarded fallback or reject with a diagnostic.
-Do not start with a full simplex implementation unless vertex enumeration proves too
-limiting.
-
-### 5E. Rational-first arithmetic
-
-Keep the optimization layer rational when possible, because the constraints come from
-CHCs and are naturally rational. Use doubles only as a last-mile approximation layer
-if necessary.
+Do not leave raw input variables in the final bound. The output of this phase must be
+a numeric upper/lower bound expression suitable for direct insertion into a phase
+lemma.
 
 ---
 
-## Phase 6 — Generate Input-Aware CHC Lemmas
-
-This phase expands CSV sub-task 6.
+## Phase 6 — Generate Numeric CHC Lemmas
 
 ### 6A. Separate homogeneous and input-driven parts
 
@@ -370,32 +346,29 @@ synthesis logic.
 
 ### 6C. Preserve phase-lemma structure
 
-The resulting lemmas should still fit the existing phase style, e.g. a thresholded
-form like:
+The resulting lemmas should still fit the existing phase style, for example:
 
 `(i > k) => x <= B_hom(i) + B_input(i)`
 
 with a symmetric lower-bound version where needed.
 
-### 6D. Prefer soundness over tightness
+### 6D. Numeric-only lemma rule
 
-If the exact best input bound cannot be computed for a phase, fall back to a wider
-but sound bound rather than skipping the lemma.
+The final lemma may contain numeric constants and symbols that denote fixed constants
+across the run, but it must not contain raw per-step input variables.
 
 ---
 
 ## Phase 7 — Preserve Bounded Non-Determinism in the CHC
-
-This phase expands CSV sub-task 7.
 
 ### 7A. Do not add `u' = u` for inputs
 
 Where the current augmentation path adds identity equations for constant parameters,
 input variables must be excluded.
 
-### 7B. Keep original input constraints in the inductive body
+### 7B. Keep original interval constraints in the inductive body
 
-The inductive CHC body should still contain the range/polytope constraints over the
+The inductive CHC body should still contain the lower/upper constraints over the
 primed input variables.
 
 ### 7C. Query/fact behavior
@@ -403,7 +376,7 @@ primed input variables.
 - Fact CHCs may contain initial-state constraints on the input variables if present,
   but those are not what defines them as inputs.
 - Query CHCs should continue to see the same program variables; no extra input-only
-  invariant variables are necessary in the first cut.
+  invariant variables are necessary in the initial version.
 
 ### 7D. Audit any helper that assumes `_INIT` means constant across time
 
@@ -414,46 +387,37 @@ support exists. Any helper making that assumption must be narrowed.
 
 ## Phase 8 — Regression Pipeline
 
-This phase expands CSV sub-task 8.
-
 ### 8A. Classification tests
 
 Add small CHCs that distinguish:
 
 - fixed unknown initial constants,
-- true bounded inputs,
+- true interval-bounded inputs,
 - unsupported mixed state/input constraints.
 
-### 8B. Independent-interval tests
+### 8B. Interval-bound tests
 
-Use benchmarks with closed-form analytic expectations for worst-case bounds, e.g.:
+Use benchmarks with closed-form analytic expectations for worst-case bounds, for
+example:
 
 - `x' = a*x + u`, `u in [0,1]`
 - `x' = a*x - u`, `u in [0,1]`
-- multi-state systems with separate inputs.
+- multi-state systems with separate interval-bounded inputs.
 
-### 8C. Joint-polytope tests
-
-Add at least one benchmark with a shared bound such as:
-
-- `u1 >= 0`, `u2 >= 0`, `u1 + u2 <= 1`
-
-and check that the chosen worst-case endpoint matches analytic reasoning.
-
-### 8D. Instability / timeout tests
+### 8C. Instability / timeout tests
 
 Confirm that unstable cases do not accidentally produce unsound finite bounds.
 Current acceptable behavior is timeout / no proof.
 
-### 8E. Bug-fix sweep
+### 8D. Bug-fix sweep
 
 Reserve time for the predictable failure modes:
 
 - input variables accidentally treated as `_INIT` constants,
 - coefficient decomposition failing on non-affine forms,
 - sign handling producing optimistic instead of worst-case bounds,
-- vertex enumeration missing a feasible extreme point,
-- CHC augmentation silently dropping input constraints.
+- final lemmas still mentioning raw input variables,
+- CHC augmentation silently dropping interval constraints.
 
 ---
 
@@ -464,8 +428,10 @@ Reserve time for the predictable failure modes:
 2. **Keep optimization sound**: if a coefficient sign is unknown, overapproximate.
 3. **Keep the CHC as the source of truth**: POLAR only computes parameterized closed
    forms; the actual bounded non-determinism lives in the inductive CHC body.
-4. **Reject unsupported joint constraints early**: state-dependent or nonlinear input
-   constraints are a different feature.
+4. **Keep final lemmas numeric**: raw input variables must be eliminated before the
+   SMT-facing phase lemmas are emitted.
+5. **Reject unsupported input formats early**: joint, nonlinear, or state-dependent
+   input constraints are outside the initial version.
 
 ---
 
@@ -473,7 +439,7 @@ Reserve time for the predictable failure modes:
 
 | File | Change Type | Effort |
 |---|---|---|
-| `include/deep/RndLearnerV5.hpp` | Add input detection, split `_INIT` handling, preserve non-det CHC constraints, generate input-aware lemmas | Large |
+| `include/deep/RndLearnerV5.hpp` | Add input detection, split `_INIT` handling, preserve interval constraints, generate numeric input bounds | Large |
 | `tools/polar/closedforms2.py` | Add affine-in-input decomposition and emit `input_coeffs` JSON | Medium |
 | `docs/random_val.md` | No changes required; source note only | — |
-| benchmark files under `bench_horn/` or a new input subset | Add independent-interval and joint-constraint regressions | Medium |
+| benchmark files under `bench_horn/` or a new input subset | Add interval-bounded input regressions | Medium |

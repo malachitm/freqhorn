@@ -155,6 +155,14 @@ struct phaseLemmas
 
 namespace ufo
 {
+    struct AlgRootEntry
+    {
+        std::string name;
+        AlgebraicNum alnum;
+        Expr var;
+        Expr varPrime;
+    };
+
     template <typename T>
     struct NumericPairAlias
     {
@@ -208,6 +216,7 @@ namespace ufo
         /// Persistent QF_NRA solver, lazily initialized on first use.
         /// Kept as std::optional because ZSolver has no default ctor.
         std::optional<ZSolver<EZ3>> nlsolver;
+        map<int, std::vector<AlgRootEntry>> algRootRegistry;
 
     public:
         RndLearnerV5(ExprFactory &_e, EZ3 &_z3, CHCs &_r, unsigned _to, int _debug) : RndLearnerV4(_e, _z3, _r, _to, false, false, 0, 0, false, 0, false, false,
@@ -441,6 +450,63 @@ namespace ufo
             pendingInitVarPairs[invIdx].clear();
         }
 
+        const AlgRootEntry *findAlgRootEntry(int invIdx, const std::string &name) const
+        {
+            auto it = algRootRegistry.find(invIdx);
+            if (it == algRootRegistry.end())
+                return nullptr;
+
+            for (const auto &entry : it->second)
+            {
+                if (entry.name == name)
+                    return &entry;
+            }
+            return nullptr;
+        }
+
+        mpq_class parseRationalString(const std::string &value)
+        {
+            mpq_class parsed;
+            if (parsed.set_str(value, 10) != 0)
+            {
+                throw std::runtime_error("invalid rational string: " + value);
+            }
+            parsed.canonicalize();
+            return parsed;
+        }
+
+        void parseAuxRoots(int i, const nlohmann::json &auxRoots)
+        {
+            assert(i < invNumber);
+            std::vector<AlgRootEntry> parsedRoots;
+            parsedRoots.reserve(auxRoots.size());
+
+            for (const auto &entry : auxRoots)
+            {
+                if (!entry.contains("name") || !entry.contains("poly_coeffs") ||
+                    !entry.contains("low") || !entry.contains("high"))
+                {
+                    continue;
+                }
+
+                AlgRootEntry parsed;
+                parsed.name = entry["name"].get<std::string>();
+                parsed.alnum.rootIdx = 0;
+                parsed.alnum.poly.clear();
+                for (const auto &coeff : entry["poly_coeffs"])
+                {
+                    parsed.alnum.poly.emplace_back(coeff.get<std::string>());
+                }
+                parsed.alnum.lower = parseRationalString(entry["low"].get<std::string>());
+                parsed.alnum.upper = parseRationalString(entry["high"].get<std::string>());
+                parsed.var = bind::realConst(mkTerm<std::string>(parsed.name, m_efac));
+                parsed.varPrime = bind::realConst(mkTerm<std::string>(parsed.name + "'", m_efac));
+                parsedRoots.push_back(parsed);
+            }
+
+            algRootRegistry[i] = std::move(parsedRoots);
+        }
+
         /**
          *
          */
@@ -448,8 +514,15 @@ namespace ufo
         // variables.  Substitutes each sqrtN with std::sqrt(N) so that the
         // resulting string is purely numeric and can be parsed by
         // expr_to_double.
-        double evaluateBaseString(const std::string &baseStr)
+        double evaluateBaseString(int invIdx, const std::string &baseStr)
         {
+            if (baseStr.find("_alg_") != std::string::npos)
+            {
+                Expr parsed = str_to_expr(baseStr, std::vector<std::string>(), invIdx);
+                Expr indexVar = indices.count(invIdx) > 0 ? indices.at(invIdx) : zeroReal;
+                return expr_to_double(replaceCoeffVariables(parsed, indexVar, invIdx));
+            }
+
             std::string s = baseStr;
             // Find all occurrences of "sqrtDDD..." and replace with numeric value
             std::string::size_type pos = 0;
@@ -488,7 +561,7 @@ namespace ufo
             ExprSet bounds;
             for (auto &[numeric, symbolic] : rootMaps[i])
             {
-                double temp = evaluateBaseString(numeric);
+                double temp = evaluateBaseString(i, numeric);
                 if (temp < 0)
                 {
                     DLOG_IF(3)
@@ -749,7 +822,12 @@ namespace ufo
                         hasNonlinearity = true;
                     }
 
-                    Expr t = str_to_expr(c_str);
+                    if (c_str.find("_alg_") != std::string::npos || b_str.find("_alg_") != std::string::npos)
+                    {
+                        hasNonlinearity = true;
+                    }
+
+                    Expr t = str_to_expr(c_str, std::vector<std::string>(), i);
                     DLOG(5) << "new expression: " << t << "\n";
                     Expr c = replaceCoeffVariables(t, index, i);
                     Expr b = rootMap[b_str];
@@ -1909,7 +1987,7 @@ namespace ufo
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
             DLOG(5) << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
 
-            Expr myRootUpdate = str_to_expr(rootVal, sqrts);
+            Expr myRootUpdate = str_to_expr(rootVal, sqrts, i);
 
             // Normalize init-variable names that POLAR emits in lowercase
             // (e.g. _fh_0_init) to the internal uppercase representation
@@ -2550,6 +2628,20 @@ namespace ufo
                 {
                     replacements[var] = indexVar;
                 }
+                else if (vname.substr(0, 5) == "_alg_")
+                {
+                    const AlgRootEntry *algEntry = findAlgRootEntry(invIdx, vname);
+                    if (algEntry != nullptr)
+                    {
+                        replacements[var] = mkTerm(algEntry->alnum, m_efac);
+                    }
+                    else
+                    {
+                        DLOG(2) << "Warning: unknown algebraic placeholder '" << vname
+                                << "' in coefficient, replacing with index\n";
+                        replacements[var] = indexVar;
+                    }
+                }
                 else if (vname.substr(0, 4) == "sqrt")
                 {
                     // Look up the matching sqrt Expr in invarVarsShort
@@ -2670,6 +2762,13 @@ namespace ufo
             // outfile << "(set-logic QF_LIRA)\n";
             outfile += "(declare-const _x Real)\n";
             outfile += "(declare-const n Real)\n";
+            if (algRootRegistry.count(i) > 0)
+            {
+                for (const auto &entry : algRootRegistry[i])
+                {
+                    outfile += "(declare-const " + entry.name + " Real)\n";
+                }
+            }
             for (auto s : sqrts)
             {
                 outfile += "(declare-const sqrt" + s + " Real)\n";
@@ -2988,6 +3087,11 @@ namespace ufo
             errs() << "JSON error: " << e.what() << "\n";
             outs() << "unknown\n";
             return;
+        }
+
+        if (closedformJson.contains("aux_roots") && closedformJson["aux_roots"].is_array())
+        {
+            ds.parseAuxRoots(i, closedformJson["aux_roots"]);
         }
 
         /**

@@ -5,6 +5,31 @@ Replace the hacky `sqrt{N}` string-matching system with a robust algebraic numbe
 representation using Isolating Interval Representation: a number defined by its
 minimal polynomial `P(x)` and a rational bounding box `[a, b]`.
 
+## Status Snapshot (May 2026)
+
+### Completed
+
+- **Feature 1.1**: algebraic base classification and registration landed in `closedforms2.py`.
+- **Feature 1.2**: `aux_roots` JSON emission landed in the POLAR output path.
+- **Feature 1.3**: `AlgRootEntry` plus `parseAuxRoots()` landed in `RndLearnerV5.hpp`.
+- **Feature 1.4**: `createRootConstraint()` now handles arbitrary polynomial degree with the degree-5 guard.
+- **Feature 1.5**: the `algRootRegistry` insertion path is wired while preserving CHC positional ordering.
+- **Feature 1.7**: `parseAuxRoots()` is wired before `generateSymbolicClosedForms()`.
+- **Feature 1.9**: the algebraic simplifier generalisation (`simplifyAlgExpr`, `toAlgVec`, `mulModP`, `fromAlgVec`) landed.
+- **Feature 1.10**: Python-side complex-root magnitude metadata helpers landed (`mag_poly_from_complex_root`, periodicity helpers, complex metadata extraction).
+
+### Partial / In Progress
+
+- **Feature 1.6**: `generateRootBounds`, `evaluateBaseString`, and `_alg_k` declaration support in `str_to_expr` are updated, but the legacy sqrt-only helpers and fallback path are still present.
+- **Feature 1.8**: focused regressions and bug fixes were run (`pi1.smt2`, plus Python unit tests), but the full `bench_horn` regression sweep is still pending.
+- **Feature 1.11**: the Python side now emits initial `complex_pairs` metadata, rewrites conjugate-pair terms, and rewrites negative real bases as phase entries; the final end-to-end representation and C++ consumer are still pending.
+
+### Not Yet Started In This Plan
+
+- No **Feature 3** subtasks are counted as completed yet.
+- No **Feature 4** subtasks are counted as completed yet.
+- Some adjacent `generatePolarFile2()` cleanup landed earlier (for `_INIT` naming and equality orientation), but that is not enough to mark any guard or input subtasks complete.
+
 ---
 
 ## What Is Already In Place (Do Not Reimplement)

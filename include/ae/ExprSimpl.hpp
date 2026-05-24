@@ -371,6 +371,8 @@ namespace ufo
 
   // Forward declaration — defined after simplifyPlus / simplifyMult.
   static Expr simplifySqrtExpr(Expr e);
+  static Expr simplifyAlgExpr(Expr e, Expr algConst,
+                              const std::vector<mpq_class> &poly);
 
   inline static unsigned containsNum(Expr a, Expr b)
   {
@@ -1911,6 +1913,180 @@ namespace ufo
     }
 
     return e;
+  }
+
+  /// Multiply two coefficient vectors in Q[x]/(P), where poly[k] is the
+  /// coefficient of x^k and poly.back() is the leading coefficient.
+  static std::vector<mpq_class> mulModP(const std::vector<mpq_class> &lhs,
+                                        const std::vector<mpq_class> &rhs,
+                                        const std::vector<mpq_class> &poly)
+  {
+    assert(poly.size() >= 2);
+    unsigned deg = poly.size() - 1;
+    std::vector<mpq_class> prod(2 * deg - 1, mpq_class(0));
+
+    for (unsigned i = 0; i < deg; ++i)
+      for (unsigned j = 0; j < deg; ++j)
+        prod[i + j] += lhs[i] * rhs[j];
+
+    mpq_class lead = poly.back();
+    assert(lead != 0);
+    for (int cur = static_cast<int>(prod.size()) - 1; cur >= static_cast<int>(deg); --cur)
+    {
+      mpq_class coeff = prod[cur];
+      if (coeff == 0)
+        continue;
+      for (unsigned k = 0; k < deg; ++k)
+      {
+        prod[cur - static_cast<int>(deg) + static_cast<int>(k)] -= coeff * poly[k] / lead;
+      }
+      prod[cur] = 0;
+    }
+
+    prod.resize(deg);
+    for (auto &c : prod)
+      c.canonicalize();
+    return prod;
+  }
+
+  /// Try to decompose e into c_0 + c_1*a + ... + c_{d-1}*a^{d-1}
+  /// where a is algConst and poly is the minimal polynomial of degree d.
+  static bool toAlgVec(Expr e, Expr algConst,
+                       const std::vector<mpq_class> &poly,
+                       std::vector<mpq_class> &coeffs)
+  {
+    assert(poly.size() >= 2);
+    unsigned deg = poly.size() - 1;
+    coeffs.assign(deg, mpq_class(0));
+
+    if (e == algConst)
+    {
+      if (deg == 1)
+      {
+        coeffs[0] = -poly[0] / poly[1];
+      }
+      else
+      {
+        coeffs[1] = 1;
+      }
+      return true;
+    }
+    if (isRatConst(e))
+    {
+      coeffs[0] = exprToQ(e);
+      return true;
+    }
+
+    if (isOpX<UN_MINUS>(e))
+    {
+      if (!toAlgVec(e->left(), algConst, poly, coeffs))
+        return false;
+      for (auto &c : coeffs)
+        c = -c;
+      return true;
+    }
+
+    if (isOpX<PLUS>(e))
+    {
+      std::vector<mpq_class> acc(deg, mpq_class(0));
+      for (unsigned i = 0; i < e->arity(); ++i)
+      {
+        std::vector<mpq_class> term;
+        if (!toAlgVec(e->arg(i), algConst, poly, term))
+          return false;
+        for (unsigned j = 0; j < deg; ++j)
+          acc[j] += term[j];
+      }
+      for (auto &c : acc)
+        c.canonicalize();
+      coeffs = acc;
+      return true;
+    }
+
+    if (isOpX<MINUS>(e) && e->arity() == 2)
+    {
+      std::vector<mpq_class> lhs, rhs;
+      if (!toAlgVec(e->left(), algConst, poly, lhs) ||
+          !toAlgVec(e->right(), algConst, poly, rhs))
+        return false;
+      for (unsigned i = 0; i < deg; ++i)
+        lhs[i] -= rhs[i];
+      for (auto &c : lhs)
+        c.canonicalize();
+      coeffs = lhs;
+      return true;
+    }
+
+    if (isOpX<MULT>(e))
+    {
+      ExprVector ops;
+      getMultOps(e, ops);
+      std::vector<mpq_class> acc(deg, mpq_class(0));
+      acc[0] = 1;
+      for (auto &a : ops)
+      {
+        std::vector<mpq_class> factor;
+        if (!toAlgVec(a, algConst, poly, factor))
+          return false;
+        acc = mulModP(acc, factor, poly);
+      }
+      coeffs = acc;
+      return true;
+    }
+
+    return false;
+  }
+
+  static Expr fromAlgVec(const std::vector<mpq_class> &coeffs,
+                         Expr algConst, ExprFactory &efac)
+  {
+    ExprVector terms;
+    Expr power = algConst;
+    for (unsigned i = 0; i < coeffs.size(); ++i)
+    {
+      mpq_class c = coeffs[i];
+      c.canonicalize();
+      if (c == 0)
+      {
+        if (i > 0 && i + 1 < coeffs.size())
+          power = mk<MULT>(power, algConst);
+        continue;
+      }
+
+      Expr term = nullptr;
+      if (i == 0)
+      {
+        term = qToExpr(c, efac);
+      }
+      else
+      {
+        if (c == 1)
+          term = power;
+        else if (c == -1)
+          term = mk<UN_MINUS>(power);
+        else
+          term = mk<MULT>(qToExpr(c, efac), power);
+      }
+      terms.push_back(term);
+
+      if (i > 0 && i + 1 < coeffs.size())
+        power = mk<MULT>(power, algConst);
+    }
+    return mkplus(terms, efac);
+  }
+
+  /// Simplify an arithmetic expression modulo the minimal polynomial of a
+  /// single algebraic constant. Returns e unchanged if decomposition fails.
+  static Expr simplifyAlgExpr(Expr e, Expr algConst,
+                              const std::vector<mpq_class> &poly)
+  {
+    if (!algConst || poly.size() < 2 || !contains(e, algConst))
+      return e;
+
+    std::vector<mpq_class> coeffs;
+    if (!toAlgVec(e, algConst, poly, coeffs))
+      return e;
+    return fromAlgVec(coeffs, algConst, e->getFactory());
   }
 
   static Expr simplifyArithmDisjunctions(Expr fla, bool keepRedundandDisj);

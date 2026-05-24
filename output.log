@@ -1,0 +1,375 @@
+
+PARSING
+=======
+Reserved space for 3 CHCs and 1 declarations
+Reducing the number of CHCs: 3; and the number of declarations: 1...
+  Current CHC topology:
+    true[#0] -> Inv[#6]
+    Inv[#6] -> Inv[#6]
+    Inv[#6] -> false[#0]
+      pref: true ->     [0 -> ]        cycle: Inv ->     [1 -> ]
+  Simplified CHCs:
+  INIT:
+    true[#0] -> Inv (_FH_0', _FH_1', _FH_2', _FH_3', _FH_4', _FH_5')
+    body: 
+    [&&
+      (95=_FH_0')
+      (0=_FH_2')
+      (0=_FH_4')
+      (0=_FH_5')
+    ]
+  TR:
+    Inv (_FH_0, _FH_1, _FH_2, _FH_3, _FH_4, _FH_5) -> Inv (_FH_0', _FH_1', _FH_2', _FH_3', _FH_4', _FH_5')
+    body: 
+    [&&
+      (_FH_3'=_FH_4')
+      (_FH_0'=(_FH_0+(1/10*_FH_3')))
+      (_FH_1'=((-_FH_0)+100))
+      (_FH_3'=((2*_FH_1')+(1/10*_FH_2')))
+      (_FH_5'=(_FH_5+1))
+      (_FH_2'=(_FH_2+(1/10*_FH_1')))
+    ]
+  BAD:
+    Inv (_FH_0, _FH_1, _FH_2, _FH_3, _FH_4, _FH_5) -> false[#0]
+    body: 
+    [&&
+      ((_FH_5+1)>=500)
+      [||
+        (-501/5>(-(_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))))
+        ((-(_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))))))>-499/5)
+      ]
+    ]
+
+INITIALIZE PREDICATE Inv
+====================
+Reflipping equality: (95=_FH_0')
+Left: 95, Right: _FH_0'
+Left side is constant, flipping back.
+Reflipping equality: (0=_FH_2')
+Left: 0, Right: _FH_2'
+Left side is constant, flipping back.
+Reflipping equality: (0=_FH_4')
+Left: 0, Right: _FH_4'
+Left side is constant, flipping back.
+Reflipping equality: (0=_FH_5')
+Left: 0, Right: _FH_5'
+Left side is constant, flipping back.
+Reflipping equality: (_FH_3'=_FH_4')
+Left: _FH_3', Right: _FH_4'
+Both sides are variables, flipping back.
+Reflipping equality: (_FH_0'=(_FH_0+(1/10*_FH_3')))
+Left: _FH_0', Right: (_FH_0+(1/10*_FH_3'))
+Equality does not need flipping.
+Reflipping equality: (_FH_1'=((-_FH_0)+100))
+Left: _FH_1', Right: ((-_FH_0)+100)
+Equality does not need flipping.
+Reflipping equality: (_FH_3'=((2*_FH_1')+(1/10*_FH_2')))
+Left: _FH_3', Right: ((2*_FH_1')+(1/10*_FH_2'))
+Equality does not need flipping.
+Reflipping equality: (_FH_5'=(_FH_5+1))
+Left: _FH_5', Right: (_FH_5+1)
+Equality does not need flipping.
+Reflipping equality: (_FH_2'=(_FH_2+(1/10*_FH_1')))
+Left: _FH_2', Right: (_FH_2+(1/10*_FH_1'))
+Equality does not need flipping.
+  INIT:
+    true[#0] -> Inv (_FH_0', _FH_1', _FH_2', _FH_3', _FH_4', _FH_5')
+    body: 
+    [&&
+      (_FH_0'=95)
+      (_FH_2'=0)
+      (_FH_4'=0)
+      (_FH_5'=0)
+    ]
+  TR:
+    Inv (_FH_0, _FH_1, _FH_2, _FH_3, _FH_4, _FH_5) -> Inv (_FH_0', _FH_1', _FH_2', _FH_3', _FH_4', _FH_5')
+    body: 
+    [&&
+      (_FH_0'=(_FH_0+(1/10*_FH_3')))
+      (_FH_1'=((-_FH_0)+100))
+      (_FH_3'=((2*_FH_1')+(1/10*_FH_2')))
+      (_FH_5'=(_FH_5+1))
+      (_FH_2'=(_FH_2+(1/10*_FH_1')))
+      (_FH_4'=_FH_3')
+    ]
+  BAD:
+    Inv (_FH_0, _FH_1, _FH_2, _FH_3, _FH_4, _FH_5) -> false[#0]
+    body: 
+    [&&
+      ((_FH_5+1)>=500)
+      [||
+        (-501/5>(-(_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))))
+        ((-(_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))))))>-499/5)
+      ]
+    ]
+Processing EQ: (_FH_0'=95) for variable: _FH_0
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Converting expresion to POLAR string: 95
+Processing EQ: (_FH_0'=95) for variable: _FH_1
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Processing EQ: (_FH_2'=0) for variable: _FH_1
+Left side of EQ: _FH_2'
+Right side of EQ: 0
+Processing EQ: (_FH_4'=0) for variable: _FH_1
+Left side of EQ: _FH_4'
+Right side of EQ: 0
+Processing EQ: (_FH_5'=0) for variable: _FH_1
+Left side of EQ: _FH_5'
+Right side of EQ: 0
+Processing EQ: (_FH_0'=95) for variable: _FH_2
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Processing EQ: (_FH_2'=0) for variable: _FH_2
+Left side of EQ: _FH_2'
+Right side of EQ: 0
+Converting expresion to POLAR string: 0
+Processing EQ: (_FH_0'=95) for variable: _FH_3
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Processing EQ: (_FH_2'=0) for variable: _FH_3
+Left side of EQ: _FH_2'
+Right side of EQ: 0
+Processing EQ: (_FH_4'=0) for variable: _FH_3
+Left side of EQ: _FH_4'
+Right side of EQ: 0
+Processing EQ: (_FH_5'=0) for variable: _FH_3
+Left side of EQ: _FH_5'
+Right side of EQ: 0
+Processing EQ: (_FH_0'=95) for variable: _FH_4
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Processing EQ: (_FH_2'=0) for variable: _FH_4
+Left side of EQ: _FH_2'
+Right side of EQ: 0
+Processing EQ: (_FH_4'=0) for variable: _FH_4
+Left side of EQ: _FH_4'
+Right side of EQ: 0
+Converting expresion to POLAR string: 0
+Processing EQ: (_FH_0'=95) for variable: _FH_5
+Left side of EQ: _FH_0'
+Right side of EQ: 95
+Processing EQ: (_FH_2'=0) for variable: _FH_5
+Left side of EQ: _FH_2'
+Right side of EQ: 0
+Processing EQ: (_FH_4'=0) for variable: _FH_5
+Left side of EQ: _FH_4'
+Right side of EQ: 0
+Processing EQ: (_FH_5'=0) for variable: _FH_5
+Left side of EQ: _FH_5'
+Right side of EQ: 0
+Converting expresion to POLAR string: 0
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_0'=(_FH_0+(1/10*_FH_3')))
+Left side of EQ: _FH_0'
+Right side of EQ: (_FH_0+(1/10*_FH_3'))
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_1'=((-_FH_0)+100))
+Left side of EQ: _FH_1'
+Right side of EQ: ((-_FH_0)+100)
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_3'=((2*_FH_1')+(1/10*_FH_2')))
+Left side of EQ: _FH_3'
+Right side of EQ: ((2*_FH_1')+(1/10*_FH_2'))
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_5'=(_FH_5+1))
+Left side of EQ: _FH_5'
+Right side of EQ: (_FH_5+1)
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_2'=(_FH_2+(1/10*_FH_1')))
+Left side of EQ: _FH_2'
+Right side of EQ: (_FH_2+(1/10*_FH_1'))
+Assuming conj->left() is a dstVar and conj->right() is its definition.
+Processing EQ: (_FH_4'=_FH_3')
+Left side of EQ: _FH_4'
+Right side of EQ: _FH_3'
+Resolving dependencies for definitions:
+_FH_0' = (_FH_0+(1/10*_FH_3'))
+_FH_1' = ((-_FH_0)+100)
+_FH_2' = (_FH_2+(1/10*_FH_1'))
+_FH_3' = ((2*_FH_1')+(1/10*_FH_2'))
+_FH_4' = _FH_3'
+_FH_5' = (_FH_5+1)
+Substituting _FH_3' with ((2*_FH_1')+(1/10*_FH_2'))
+Updated definition: _FH_0' = (_FH_0+(1/10*((2*_FH_1')+(1/10*_FH_2'))))
+Substituting _FH_1' with ((-_FH_0)+100)
+Updated definition: _FH_2' = (_FH_2+(1/10*((-_FH_0)+100)))
+Substituting _FH_1' with ((-_FH_0)+100)
+Substituting _FH_2' with (_FH_2+(1/10*((-_FH_0)+100)))
+Updated definition: _FH_3' = ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Substituting _FH_3' with ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Updated definition: _FH_4' = ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Substituting _FH_1' with ((-_FH_0)+100)
+Substituting _FH_2' with (_FH_2+(1/10*((-_FH_0)+100)))
+Updated definition: _FH_0' = (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))
+Final dependencies for definitions:
+_FH_0' = (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))
+_FH_1' = ((-_FH_0)+100)
+_FH_2' = (_FH_2+(1/10*((-_FH_0)+100)))
+_FH_3' = ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+_FH_4' = ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+_FH_5' = (_FH_5+1)
+Resolved definitions after inlining:
+_FH_0' = Converting expresion to POLAR string: (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: (1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+(_FH_0 + (1/10 * ((2 * ((-_FH_0) + 100)) + (1/10 * (_FH_2 + (1/10 * ((-_FH_0) + 100)))))))
+_FH_1' = Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+((-_FH_0) + 100)
+_FH_2' = Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+(_FH_2 + (1/10 * ((-_FH_0) + 100)))
+_FH_3' = Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+((2 * ((-_FH_0) + 100)) + (1/10 * (_FH_2 + (1/10 * ((-_FH_0) + 100)))))
+_FH_4' = Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+((2 * ((-_FH_0) + 100)) + (1/10 * (_FH_2 + (1/10 * ((-_FH_0) + 100)))))
+_FH_5' = Converting expresion to POLAR string: (_FH_5+1)
+Converting expresion to POLAR string: _FH_5
+Converting expresion to POLAR string: 1
+(_FH_5 + 1)
+Corresponding dstVar: _FH_0'
+Corresponding dstVar: _FH_1'
+Corresponding dstVar: _FH_2'
+Corresponding dstVar: _FH_3'
+Corresponding dstVar: _FH_4'
+Corresponding dstVar: _FH_5'
+Final LHS variables: _FH_0 _FH_1 _FH_2 _FH_3 _FH_4 _FH_5 
+Final RHS expressions: (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))))) ((-_FH_0)+100) (_FH_2+(1/10*((-_FH_0)+100))) ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))) ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))) (_FH_5+1) 
+LHS: _FH_0'	RHS: (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))
+LHS: _FH_1'	RHS: ((-_FH_0)+100)
+LHS: _FH_2'	RHS: (_FH_2+(1/10*((-_FH_0)+100)))
+LHS: _FH_3'	RHS: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+LHS: _FH_4'	RHS: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+LHS: _FH_5'	RHS: (_FH_5+1)
+Converting expresion to POLAR string: (_FH_0+(1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))))
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: (1/10*((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100))))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: ((2*((-_FH_0)+100))+(1/10*(_FH_2+(1/10*((-_FH_0)+100)))))
+Converting expresion to POLAR string: (2*((-_FH_0)+100))
+Converting expresion to POLAR string: 2
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (1/10*(_FH_2+(1/10*((-_FH_0)+100))))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: (_FH_2+(1/10*((-_FH_0)+100)))
+Converting expresion to POLAR string: _FH_2
+Converting expresion to POLAR string: (1/10*((-_FH_0)+100))
+Converting expresion to POLAR string: 1/10
+Converting expresion to POLAR string: ((-_FH_0)+100)
+Converting expresion to POLAR string: (-_FH_0)
+Converting expresion to POLAR string: _FH_0
+Converting expresion to POLAR string: 100
+Converting expresion to POLAR string: (_FH_5+1)
+Converting expresion to POLAR string: _FH_5
+Converting expresion to POLAR string: 1
+Successfully wrote POLAR program to /home/mtm20cb/tools/freqhorn/out.prob
+Exit code: 139

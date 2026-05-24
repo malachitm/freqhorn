@@ -1,0 +1,7 @@
+elapsed=0.050s
+Piecewise
+Piecewise((_fh_5_init, n <= 0), (_fh_6_init, n <= 1), (_fh_7_init, n <= 2), (_fh_8_init, n <= 3), (-21*_fh_0_init + 19*_fh_1_init - 7*_fh_3_init, n <= 4), (-21*_fh_1_init + 19*_fh_2_init - 7*_fh_4_init, n <= 5), (-21*_fh_2_init + 19*_fh_3_init - 7*_fh_5_init, n <= 6), (-21*_fh_3_init + 19*_fh_4_init - 7*_fh_6_init, n <= 7), (-21*_fh_4_init + 19*_fh_5_init - 7*_fh_7_init, n <= 8), (-766528204*(-1107114607/766528204)**n*_fh_6_init/1107114607, True))
+
+real	0m1.994s
+user	0m1.893s
+sys	0m1.522s

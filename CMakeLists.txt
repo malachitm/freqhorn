@@ -209,8 +209,6 @@ set(CMAKE_CXX_EXTENSIONS ON)
 #add_definitions(-Wno-inconsistent-missing-override)
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(MyTestApp testingSomething.cpp)
-
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")

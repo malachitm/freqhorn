@@ -1283,10 +1283,12 @@ namespace ufo
 
             // each variable that has a closed form — use only the final
             // (general) piece, guarded by i >= 0 for the entire domain.
-            for (auto &[name, v] : closedformJson.items())
+            for (auto item = closedformJson.items().begin(); item != closedformJson.items().end(); ++item)
             {
+                const std::string name = item.key();
+                auto &v = item.value();
                 //  get variable using the name of the variable stored in v
-                auto is_equal = [&](Expr var)
+                auto is_equal = [this, &name](Expr var)
                 {
                     return boost::algorithm::to_lower_copy(getVarName(var)) == name;
                 };

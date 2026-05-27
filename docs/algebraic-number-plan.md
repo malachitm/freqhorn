@@ -5,30 +5,35 @@ Replace the hacky `sqrt{N}` string-matching system with a robust algebraic numbe
 representation using Isolating Interval Representation: a number defined by its
 minimal polynomial `P(x)` and a rational bounding box `[a, b]`.
 
-## Status Snapshot (May 2026)
+## Status Snapshot (May 27, 2026)
 
 ### Completed
 
-- **Feature 1.1**: algebraic base classification and registration landed in `closedforms2.py`.
+- **Feature 1.1**: algebraic base classification and registration landed in `closedforms2.py` (`RootRegistry`, algebraic extraction walk).
 - **Feature 1.2**: `aux_roots` JSON emission landed in the POLAR output path.
 - **Feature 1.3**: `AlgRootEntry` plus `parseAuxRoots()` landed in `RndLearnerV5.hpp`.
 - **Feature 1.4**: `createRootConstraint()` now handles arbitrary polynomial degree with the degree-5 guard.
 - **Feature 1.5**: the `algRootRegistry` insertion path is wired while preserving CHC positional ordering.
 - **Feature 1.7**: `parseAuxRoots()` is wired before `generateSymbolicClosedForms()`.
-- **Feature 1.9**: the algebraic simplifier generalisation (`simplifyAlgExpr`, `toAlgVec`, `mulModP`, `fromAlgVec`) landed.
+- **Feature 1.9**: the algebraic simplifier generalisation (`simplifyAlgExpr`, `toAlgVec`, `mulModP`, `fromAlgVec`) landed and is used in learner-side bound simplification.
 - **Feature 1.10**: Python-side complex-root magnitude metadata helpers landed (`mag_poly_from_complex_root`, periodicity helpers, complex metadata extraction).
+- **Feature 1.11 (core path)**: end-to-end `complex_pairs` support is wired across Python emission and C++ consumption (`parseComplexPairs`, CHC variable threading for `_mag_k/_ccos_k/_csin_k`, trig recurrences, unit-circle invariant).
+- **Benchmark smokes for algebraic_numbers targets**:
+  - `a3.smt2` direct smoke test exists.
+  - `a4.smt2`, `a5.smt2`, and `a7.smt2` direct smoke tests were added and pass.
 
 ### Partial / In Progress
 
-- **Feature 1.6**: `generateRootBounds`, `evaluateBaseString`, and `_alg_k` declaration support in `str_to_expr` are updated, but the legacy sqrt-only helpers and fallback path are still present.
-- **Feature 1.8**: focused regressions and bug fixes were run (`pi1.smt2`, plus Python unit tests), but the full `bench_horn` regression sweep is still pending.
-- **Feature 1.11**: the Python side now emits initial `complex_pairs` metadata, rewrites conjugate-pair terms, and rewrites negative real bases as phase entries; the final end-to-end representation and C++ consumer are still pending.
+- **Feature 1.6**: `generateRootBounds`, `evaluateBaseString`, and `_alg_k` declaration support in `str_to_expr` are updated, but the legacy sqrt-only helpers and fallback path are still present for compatibility.
+- **Feature 1.8**: targeted regressions and smoke tests were run (including `a3/a4/a5/a7` and complex/phase serializer tests), but a full `bench_horn` sweep remains pending.
+- **Feature 5 periodic-strengthening path**: `is_periodic` / `period` metadata is parsed and stored, but explicit modulo-index implication lemmas are not injected yet; current implementation relies on the generic trig recurrence path.
+- **Solver robustness for oscillatory NRA**: infrastructure is in place, but difficult nonlinear query shapes can still require fallback tactics (tracked separately in `docs/nra-solver-fallback.md`).
 
 ### Not Yet Started In This Plan
 
 - No **Feature 3** subtasks are counted as completed yet.
 - No **Feature 4** subtasks are counted as completed yet.
-- Some adjacent `generatePolarFile2()` cleanup landed earlier (for `_INIT` naming and equality orientation), but that is not enough to mark any guard or input subtasks complete.
+- Full retirement of legacy sqrt token plumbing is still pending a compatibility cutover.
 
 ---
 
@@ -616,3 +621,31 @@ with no compile-time signal. Test after each CHC-modification step with a real `
 | `include/deep/RndLearnerV5.hpp` | Rewrite 6 methods, delete 2, add 4 (incl. `parseComplexPairs`), new structs (`AlgRootEntry`, `ComplexPairEntry`) + 2 new registry members | Large |
 | `include/ufo/Expr.hpp` | No changes | — |
 | `include/ufo/Smt/ZExprConverter.hpp` | No changes | — |
+
+---
+
+## Benchmark Readiness (a3/a4/a5/a7)
+
+The following matrix tracks how far we are from generic algebraic support
+including imaginary components for the concrete targets under:
+`pwa-horn-benchmarks/possible_features/algebraic_numbers`.
+
+| Benchmark | Required capability | Observed payload shape | Direct smoke test | Status |
+|---|---|---|---|---|
+| `a3.smt2` | Algebraic + complex-pair path | `aux_roots > 0`, `complex_pairs > 0`, periodic entry present | `tools/polar/tests/test_freqhorn_a3_smoke.py` | Passing |
+| `a4.smt2` | Complex-pair path for oscillatory rational case | `complex_pairs = 1`, `period = 8` | `tools/polar/tests/test_freqhorn_a4_smoke.py` | Passing |
+| `a5.smt2` | Negative-real phase rewrite path | `complex_pairs = 1`, `period = 2` | `tools/polar/tests/test_freqhorn_a5_smoke.py` | Passing |
+| `a7.smt2` | Non-periodic complex-pair path in dense 3x3 system | `complex_pairs = 1`, `period = null` | `tools/polar/tests/test_freqhorn_a7_smoke.py` | Passing |
+
+Current interpretation:
+- The end-to-end serializer/consumer path is now directly exercised on all
+  requested `a3/a4/a5/a7` benchmarks.
+- Remaining risk is solver difficulty on some nonlinear oscillatory queries,
+  not missing JSON schema wiring or placeholder substitution.
+
+Completion gate for this feature family:
+1. Keep `a3/a4/a5/a7` smoke tests green.
+2. Complete at least one full `bench_horn` regression pass after any major
+   solver or placeholder-ordering change.
+3. Remove legacy sqrt fallback once downstream compatibility is no longer
+   required.

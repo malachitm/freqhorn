@@ -13,9 +13,13 @@
 /llvm-seahorn/
 /seahorn-llvm/
 /gtags.files
+/debug_queries/*
 pwa-horn-benchmarks/benchmark_generator/*.smt2
 .mypy_cache
 .vscode
+.continue
+.codegraph
+.venv
 .sync
 .tags
 .tags1
@@ -29,3 +33,4 @@ tools/deep_bench/**/playbook.retry
 tools/deep_bench/**/playbook.retry
 tools/deep_bench/windows/clusterjobs.log
 tools/deep_bench/windows/out-*.tar.gz
+debug_queries/freqhorn_query_0.smt2

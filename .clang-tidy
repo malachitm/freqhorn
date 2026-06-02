@@ -1,2 +1,2 @@
-Checks: '-*, readability-*, modernize-*, bugprone-*, performance-*, clang-analyzer-*, cppcoreguidelines-*'
+Checks: '-*, readability-*, modernize-*, bugprone-*, performance-*, clang-analyzer-*, cppcoreguidelines-*, boost-*'
 WarningsAsErrors: ''

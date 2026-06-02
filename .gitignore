@@ -1,4 +1,10 @@
+*.dot
+data.json
+test*.txt
+test*.cpp
 *.prob
+.vscode/*
+.github/*
 /build/
 /GPATH
 /GRTAGS

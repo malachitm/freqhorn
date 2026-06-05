@@ -537,7 +537,10 @@ namespace ufo
 
                 const ComplexPairEntry *complexEntry = findComplexPairEntry(invIdx, vname);
                 if (complexEntry == nullptr)
+                {
                     continue;
+                }
+                    
 
                 if (vname == complexEntry->magName)
                 {
@@ -1429,15 +1432,114 @@ namespace ufo
             return "unknown_var_" + std::to_string(varExpr->getId());
         }
 
+        std::string exprToDebugString(const Expr &e)
+        {
+            if (!e)
+                return "null_expr";
+
+            std::ostringstream out;
+            out << *e;
+            return out.str();
+        }
+
+        bool referencesOnlyPolarGuardVars(const Expr &e, const std::set<std::string> &allowedVarNames)
+        {
+            if (!e)
+                return false;
+
+            if (expr::isOpX<expr::op::MPZ>(e) || expr::isOpX<expr::op::MPQ>(e))
+                return true;
+
+            if (expr::op::bind::isRealConst(e))
+                return allowedVarNames.count(getVarName(e)) > 0;
+
+            if (e->arity() == 0)
+                return false;
+
+            for (unsigned i = 0; i < e->arity(); ++i)
+            {
+                if (!referencesOnlyPolarGuardVars(e->arg(i), allowedVarNames))
+                    return false;
+            }
+
+            return true;
+        }
+
+        bool isSupportedPolarArithmeticExpr(const Expr &e, const std::set<std::string> &allowedVarNames)
+        {
+            if (!e)
+                return false;
+
+            if (expr::isOpX<expr::op::MPZ>(e) || expr::isOpX<expr::op::MPQ>(e))
+                return true;
+
+            if (expr::op::bind::isRealConst(e))
+                return allowedVarNames.count(getVarName(e)) > 0;
+
+            if (expr::isOpX<expr::op::PLUS>(e) || expr::isOpX<expr::op::MULT>(e))
+            {
+                for (unsigned i = 0; i < e->arity(); ++i)
+                {
+                    if (!isSupportedPolarArithmeticExpr(e->arg(i), allowedVarNames))
+                        return false;
+                }
+                return true;
+            }
+
+            if ((expr::isOpX<expr::op::MINUS>(e) || expr::isOpX<expr::op::DIV>(e) || expr::isOpX<expr::op::IDIV>(e)) && e->arity() == 2)
+            {
+                return isSupportedPolarArithmeticExpr(e->left(), allowedVarNames) &&
+                       isSupportedPolarArithmeticExpr(e->right(), allowedVarNames);
+            }
+
+            if ((expr::isOpX<expr::op::UN_MINUS>(e) || expr::isOpX<expr::op::NEG>(e)) && e->arity() == 1)
+            {
+                return isSupportedPolarArithmeticExpr(e->left(), allowedVarNames);
+            }
+
+            return false;
+        }
+
+        bool isSupportedPolarConditionExpr(const Expr &e, const std::set<std::string> &allowedVarNames)
+        {
+            if (!e)
+                return false;
+
+            if (isOpX<AND>(e) || isOpX<OR>(e))
+            {
+                for (unsigned i = 0; i < e->arity(); ++i)
+                {
+                    if (!isSupportedPolarConditionExpr(e->arg(i), allowedVarNames))
+                        return false;
+                }
+                return true;
+            }
+
+            if (isOpX<NEG>(e) && e->arity() == 1)
+            {
+                return isSupportedPolarConditionExpr(e->left(), allowedVarNames);
+            }
+
+            if ((isOpX<EQ>(e) || isOpX<NEQ>(e) || isOpX<LT>(e) || isOpX<LEQ>(e) || isOpX<GT>(e) || isOpX<GEQ>(e)) && e->arity() == 2)
+            {
+                return isSupportedPolarArithmeticExpr(e->left(), allowedVarNames) &&
+                       isSupportedPolarArithmeticExpr(e->right(), allowedVarNames);
+            }
+
+            return false;
+        }
+
         // Helper function to convert an Expr to its POLAR string representation
-        std::string exprToPolarString(const Expr &e, const std::map<std::string, std::string> &varRenames = {})
+        std::string exprToPolarString(const Expr &e, const std::map<std::string, std::string> &varRenames = {}, bool failOnUnsupported = false)
         {
             DLOG_IF(3)
             {
                 std::cout << "Converting expresion to POLAR string: " << *e << std::endl;
             }
             if (!e)
+            {
                 return "null_expr";
+            }
 
             if (expr::isOpX<expr::op::MPZ>(e) || expr::isOpX<expr::op::MPQ>(e))
             {
@@ -1491,11 +1593,70 @@ namespace ufo
             {
                 return "(" + exprToPolarString(e->left(), varRenames) + " / " + exprToPolarString(e->right(), varRenames) + ")";
             }
+            DLOG(3) << "Unsupported POLAR arithmetic expression: " << e << "\n";
             // Add more operators as needed (e.g., MOD)
-            std::cout << "Unsupported expression type: " << *e << std::endl;
             return "unsupported_expr(" + boost::lexical_cast<std::string>(e->op()) + ")";
         }
 
+        auto exprToPolarConditionString(const Expr &e, const std::map<std::string, std::string> &varRenames = {}) -> std::string
+        {
+            if (!e)
+                throw std::runtime_error("Null loop guard expression cannot be serialized to POLAR");
+
+            if (isOpX<AND>(e))
+            {
+                if (e->arity() == 0)
+                    return "true";
+
+                std::string out = exprToPolarConditionString(e->arg(0), varRenames);
+                for (unsigned i = 1; i < e->arity(); ++i)
+                {
+                    out = "(" + out + " && " + exprToPolarConditionString(e->arg(i), varRenames) + ")";
+                }
+                return out;
+            }
+
+            if (isOpX<OR>(e))
+            {
+                if (e->arity() == 0)
+                    return "false";
+
+                std::string out = exprToPolarConditionString(e->arg(0), varRenames);
+                for (unsigned i = 1; i < e->arity(); ++i)
+                {
+                    out = "(" + out + " || " + exprToPolarConditionString(e->arg(i), varRenames) + ")";
+                }
+                return out;
+            }
+
+            if (isOpX<NEG>(e) && e->arity() == 1)
+            {
+                return "!(" + exprToPolarConditionString(e->left(), varRenames) + ")";
+            }
+
+            if ((isOpX<EQ>(e) || isOpX<NEQ>(e) || isOpX<LT>(e) || isOpX<LEQ>(e) || isOpX<GT>(e) || isOpX<GEQ>(e)) && e->arity() == 2)
+            {
+                std::string op;
+                if (isOpX<EQ>(e))
+                    op = "==";
+                else if (isOpX<NEQ>(e))
+                    op = "/=";
+                else if (isOpX<LT>(e))
+                    op = "<";
+                else if (isOpX<LEQ>(e))
+                    op = "<=";
+                else if (isOpX<GT>(e))
+                    op = ">";
+                else
+                    op = ">=";
+
+                return "(" + exprToPolarString(e->left(), varRenames, true) + " " + op + " " + exprToPolarString(e->right(), varRenames, true) + ")";
+            }
+
+            throw std::runtime_error("Unsupported loop guard expression for POLAR serialization: " + exprToDebugString(e));
+        }
+
+        // TODO: Break down this function into smaller functions
         void generatePolarFile2(ufo::CHCs &ruleManager, const std::string &outputFilename, int myinv = 0)
         {
             ufo::HornRuleExt *factRule = nullptr;
@@ -1642,8 +1803,10 @@ namespace ufo
             }
             expr::ExprSet inductiveConjuncts;
             ufo::getConj(inductiveRule->body, inductiveConjuncts);
+
             for (const auto &conj : inductiveConjuncts)
             {
+                bool classifiedAsUpdate = false;
                 if (expr::isOpX<expr::op::EQ>(conj) && conj->arity() == 2)
                 {
                     Expr lhs = conj->left();
@@ -1664,16 +1827,25 @@ namespace ufo
                     if (lhsIsDst && !rhsIsDst)
                     {
                         dstVarDefinitions[dstVarsByName[lhsName]] = rhs;
+                        classifiedAsUpdate = true;
                     }
                     else if (rhsIsDst && !lhsIsDst)
                     {
                         dstVarDefinitions[dstVarsByName[rhsName]] = lhs;
+                        classifiedAsUpdate = true;
                     }
                     else if (lhsIsDst)
                     {
                         dstVarDefinitions[dstVarsByName[lhsName]] = rhs;
+                        classifiedAsUpdate = true;
                     }
                 }
+
+                if (classifiedAsUpdate)
+                {
+                    continue;
+                }
+                    
             }
 
             // *** Inlining Step ***
@@ -2824,26 +2996,11 @@ namespace ufo
             return myRealCounter;
         }
 
-        // For version 0.0, this only grabs variables that are inside of the body
-        // of the body of query
-        std::string getCallToPolar(int i)
+        // For version 0.0, this only grabs variables that are inside
+        // of the body of the query
+        auto getCallToPolar(int i) -> std::string
         {
             assert(i < invNumber);
-            ExprVector allVar = qr[i]->srcVars;
-            ExprVector bodyVar;
-            std::copy_if(allVar.begin(), allVar.end(), std::back_inserter(bodyVar),
-                         [&](Expr e)
-                         {
-                             if (!contains(qr[i]->body, e))
-                                 return false;
-                             // Exclude identity vars (v'=v): they are replaced by _init
-                             // parameters in the POLAR program and have no loop recurrence.
-                             std::string name = getVarName(e);
-                             if (identityLinkedVarNames.count(i) > 0 &&
-                                 identityLinkedVarNames.at(i).count(name) > 0)
-                                 return false;
-                             return true;
-                         });
             auto shellQuote = [](const std::string &path)
             {
                 std::string quoted = "'";
@@ -2882,9 +3039,41 @@ namespace ufo
 
             std::string call = shellQuote(pythonCmd) + " " + shellQuote(polarScript);
             call += " " + shellQuote(probFilePath);
-            call += std::accumulate(bodyVar.begin(), bodyVar.end(), string(),
-                                    [&](std::string &a, Expr b)
-                                    { return a += " " + boost::algorithm::to_lower_copy(getVarName(b)); });
+
+            std::vector<std::string> varsToRequest;
+            // why is the size of i relevant? Isn't i related to 
+            if (static_cast<size_t>(i) < polarVarNames.size() && !polarVarNames[i].empty())
+            {
+                // Request all emitted loop-state variables.  Exit-path queries can
+                // mention next-state names that are not present in qr[i]->srcVars,
+                // so relying on the query source variables alone can miss the
+                // closed form needed for the safety check.
+                varsToRequest = polarVarNames[i];
+            }
+            else
+            {
+                ExprVector allVar = qr[i]->srcVars;
+                ExprVector bodyVar;
+                std::copy_if(allVar.begin(), allVar.end(), std::back_inserter(bodyVar),
+                             [&](Expr e)
+                             {
+                                 if (!contains(qr[i]->body, e)) {
+                                     return false;
+                                 }
+                                 std::string name = getVarName(e);
+                                 return identityLinkedVarNames.count(i) <= 0 ||
+                                     identityLinkedVarNames.at(i).count(name) <= 0;
+                             });
+
+                for (const auto &var : bodyVar)
+                {
+                    varsToRequest.push_back(boost::algorithm::to_lower_copy(getVarName(var)));
+                }
+            }
+
+            call += std::accumulate(varsToRequest.begin(), varsToRequest.end(), string(),
+                                    [&](std::string &a, const std::string &b)
+                                    { return a += " " + b; });
             // outs() << call << "\n";
             return call;
         }

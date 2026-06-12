@@ -1,3 +1,5 @@
+evaluate_formula*
+output.txt
 *.dot
 data.json
 test*.txt

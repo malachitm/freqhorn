@@ -1,4 +1,6 @@
 evaluate_formula*
+*.py
+/testing/*
 output.txt
 *.dot
 data.json

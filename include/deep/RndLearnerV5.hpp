@@ -4,8 +4,9 @@
 #include "RndLearnerV4.hpp"
 #include "deep/Config.hpp"
 #include <memory>
-#include "deep/Horn.hpp"    // For CHCs, HornRuleExt
-#include "ufo/Expr.hpp"     // For Expr, ExprVector, etc.
+#include "deep/Horn.hpp" // For CHCs, HornRuleExt
+#include "ufo/Expr.hpp"  // For Expr, ExprVector, etc.
+#include "ufo/AlgebraicUtils.hpp"
 #include "ae/ExprSimpl.hpp" // For getConj, etc.
 #include <vector>
 #include <map>
@@ -155,6 +156,49 @@ struct phaseLemmas
 
 namespace ufo
 {
+    struct AlgRootEntry
+    {
+        std::string name;
+        AlgebraicNum alnum;
+        Expr var;
+        Expr varPrime;
+    };
+
+    struct ComplexPairEntry
+    {
+        std::string magName;
+        std::string ccosName;
+        std::string csinName;
+        AlgebraicNum magAlnum;
+        Expr cosThetaExpr;
+        Expr sinThetaExpr;
+        double cosTheta;
+        double sinTheta;
+        bool isPeriodic;
+        int period;
+        Expr magVar;
+        Expr magVarPrime;
+        Expr ccosVar;
+        Expr ccosVarPrime;
+        Expr csinVar;
+        Expr csinVarPrime;
+        // Algebraic representations of cos(θ) and sin(θ).
+        // When set, cosThetaExpr / sinThetaExpr point at the corresponding
+        // variable instead of a rational approximation.
+        bool hasCosThetaAlg = false;
+        bool hasSinThetaAlg = false;
+        bool cosThetaReusesMag = false; // cosThetaExpr == magVar
+        bool sinThetaReusesMag = false; // sinThetaExpr == magVar
+        AlgebraicNum cosThetaAlnum;
+        AlgebraicNum sinThetaAlnum;
+        std::string cosThetaName; // e.g. "_ctheta_0"
+        std::string sinThetaName; // e.g. "_stheta_0"
+        Expr cosThetaVar;
+        Expr cosThetaVarPrime;
+        Expr sinThetaVar;
+        Expr sinThetaVarPrime;
+    };
+
     template <typename T>
     struct NumericPairAlias
     {
@@ -208,6 +252,8 @@ namespace ufo
         /// Persistent QF_NRA solver, lazily initialized on first use.
         /// Kept as std::optional because ZSolver has no default ctor.
         std::optional<ZSolver<EZ3>> nlsolver;
+        map<int, std::vector<AlgRootEntry>> algRootRegistry;
+        map<int, std::vector<ComplexPairEntry>> complexPairRegistry;
 
     public:
         RndLearnerV5(ExprFactory &_e, EZ3 &_z3, CHCs &_r, unsigned _to, int _debug) : RndLearnerV4(_e, _z3, _r, _to, false, false, 0, 0, false, 0, false, false,
@@ -441,6 +487,465 @@ namespace ufo
             pendingInitVarPairs[invIdx].clear();
         }
 
+        const AlgRootEntry *findAlgRootEntry(int invIdx, const std::string &name) const
+        {
+            auto it = algRootRegistry.find(invIdx);
+            if (it == algRootRegistry.end())
+                return nullptr;
+
+            for (const auto &entry : it->second)
+            {
+                if (entry.name == name)
+                    return &entry;
+            }
+            return nullptr;
+        }
+
+        const ComplexPairEntry *findComplexPairEntry(int invIdx, const std::string &name) const
+        {
+            auto it = complexPairRegistry.find(invIdx);
+            if (it == complexPairRegistry.end())
+                return nullptr;
+
+            for (const auto &entry : it->second)
+            {
+                if (entry.magName == name || entry.ccosName == name || entry.csinName == name)
+                    return &entry;
+            }
+            return nullptr;
+        }
+
+        Expr replaceClosedFormPlaceholdersWithConstants(Expr expr, int invIdx)
+        {
+            ExprSet vars;
+            filter(expr, bind::IsConst(), inserter(vars, vars.begin()));
+
+            if (vars.empty())
+                return expr;
+
+            ExprMap replacements;
+            for (const Expr &var : vars)
+            {
+                std::string vname = getVarName(var);
+                if (vname.rfind("_alg_", 0) == 0)
+                {
+                    const AlgRootEntry *entry = findAlgRootEntry(invIdx, vname);
+                    if (entry != nullptr)
+                        replacements[var] = mkTerm(entry->alnum, m_efac);
+                    continue;
+                }
+
+                const ComplexPairEntry *complexEntry = findComplexPairEntry(invIdx, vname);
+                if (complexEntry == nullptr)
+                    continue;
+
+                if (vname == complexEntry->magName)
+                {
+                    replacements[var] = mkTerm(complexEntry->magAlnum, m_efac);
+                }
+                else if (vname == complexEntry->ccosName)
+                {
+                    replacements[var] = complexEntry->cosThetaExpr;
+                }
+                else if (vname == complexEntry->csinName)
+                {
+                    replacements[var] = complexEntry->sinThetaExpr;
+                }
+            }
+
+            return replacements.empty() ? expr : replaceAll(expr, replacements);
+        }
+
+        mpq_class parseRationalString(const std::string &value)
+        {
+            mpq_class parsed;
+            if (parsed.set_str(value, 10) != 0)
+            {
+                throw std::runtime_error("invalid rational string: " + value);
+            }
+            parsed.canonicalize();
+            return parsed;
+        }
+
+        Expr parseRealLiteralExpr(const std::string &value)
+        {
+            try
+            {
+                return mkTerm(parseRationalString(value), m_efac);
+            }
+            catch (const std::exception &)
+            {
+                return double_to_expr(std::stod(value));
+            }
+        }
+
+        double parseRealLiteralDouble(const std::string &value)
+        {
+            try
+            {
+                return parseRationalString(value).get_d();
+            }
+            catch (const std::exception &)
+            {
+                return std::stod(value);
+            }
+        }
+
+        void parseAuxRoots(int i, const nlohmann::json &auxRoots)
+        {
+            assert(i < invNumber);
+            std::vector<AlgRootEntry> parsedRoots;
+            parsedRoots.reserve(auxRoots.size());
+
+            for (const auto &entry : auxRoots)
+            {
+                if (!entry.contains("name") || !entry.contains("poly_coeffs") ||
+                    !entry.contains("low") || !entry.contains("high"))
+                {
+                    continue;
+                }
+
+                AlgRootEntry parsed;
+                parsed.name = entry["name"].get<std::string>();
+                parsed.alnum.rootIdx = 0;
+                parsed.alnum.poly.clear();
+                for (const auto &coeff : entry["poly_coeffs"])
+                {
+                    parsed.alnum.poly.emplace_back(coeff.get<std::string>());
+                }
+                parsed.alnum.lower = parseRationalString(entry["low"].get<std::string>());
+                parsed.alnum.upper = parseRationalString(entry["high"].get<std::string>());
+                parsed.var = bind::realConst(mkTerm<std::string>(parsed.name, m_efac));
+                parsed.varPrime = bind::realConst(mkTerm<std::string>(parsed.name + "'", m_efac));
+                parsedRoots.push_back(parsed);
+            }
+
+            algRootRegistry[i] = std::move(parsedRoots);
+        }
+
+        void parseComplexPairs(int i, const nlohmann::json &complexPairs)
+        {
+            assert(i < invNumber);
+            std::vector<ComplexPairEntry> parsedPairs;
+            parsedPairs.reserve(complexPairs.size());
+
+            for (const auto &entry : complexPairs)
+            {
+                if (!entry.contains("mag_name") || !entry.contains("ccos_name") ||
+                    !entry.contains("csin_name") || !entry.contains("mag_poly") ||
+                    !entry.contains("mag_low") || !entry.contains("mag_high") ||
+                    !entry.contains("cos_theta") || !entry.contains("sin_theta"))
+                {
+                    continue;
+                }
+
+                ComplexPairEntry parsed;
+                parsed.magName = entry["mag_name"].get<std::string>();
+                parsed.ccosName = entry["ccos_name"].get<std::string>();
+                parsed.csinName = entry["csin_name"].get<std::string>();
+                parsed.magAlnum.rootIdx = 0;
+                parsed.magAlnum.poly.clear();
+                for (const auto &coeff : entry["mag_poly"])
+                {
+                    parsed.magAlnum.poly.emplace_back(coeff.get<std::string>());
+                }
+                parsed.magAlnum.lower = parseRationalString(entry["mag_low"].get<std::string>());
+                parsed.magAlnum.upper = parseRationalString(entry["mag_high"].get<std::string>());
+                parsed.cosThetaExpr = parseRealLiteralExpr(entry["cos_theta"].get<std::string>());
+                parsed.sinThetaExpr = parseRealLiteralExpr(entry["sin_theta"].get<std::string>());
+                parsed.cosTheta = parseRealLiteralDouble(entry["cos_theta"].get<std::string>());
+                parsed.sinTheta = parseRealLiteralDouble(entry["sin_theta"].get<std::string>());
+                parsed.isPeriodic = entry.value("is_periodic", false);
+                parsed.period = entry.contains("period") && !entry["period"].is_null()
+                                    ? entry["period"].get<int>()
+                                    : 0;
+                parsed.magVar = bind::realConst(mkTerm<std::string>(parsed.magName, m_efac));
+                parsed.magVarPrime = bind::realConst(mkTerm<std::string>(parsed.magName + "'", m_efac));
+                parsed.ccosVar = bind::realConst(mkTerm<std::string>(parsed.ccosName, m_efac));
+                parsed.ccosVarPrime = bind::realConst(mkTerm<std::string>(parsed.ccosName + "'", m_efac));
+                parsed.csinVar = bind::realConst(mkTerm<std::string>(parsed.csinName, m_efac));
+                parsed.csinVarPrime = bind::realConst(mkTerm<std::string>(parsed.csinName + "'", m_efac));
+
+                // --- Algebraic cos(θ) ---
+                if (entry.contains("cos_theta_poly"))
+                {
+                    parsed.hasCosThetaAlg = true;
+                    parsed.cosThetaAlnum.rootIdx = 0;
+                    for (const auto &coeff : entry["cos_theta_poly"])
+                        parsed.cosThetaAlnum.poly.emplace_back(coeff.get<std::string>());
+                    parsed.cosThetaAlnum.lower =
+                        parseRationalString(entry["cos_theta_low"].get<std::string>());
+                    parsed.cosThetaAlnum.upper =
+                        parseRationalString(entry["cos_theta_high"].get<std::string>());
+
+                    // Reuse magVar when it refers to the same algebraic number.
+                    bool samePoly = (parsed.cosThetaAlnum.poly == parsed.magAlnum.poly);
+                    bool overlap = (parsed.cosThetaAlnum.lower <= parsed.magAlnum.upper &&
+                                    parsed.magAlnum.lower <= parsed.cosThetaAlnum.upper);
+                    if (samePoly && overlap)
+                    {
+                        parsed.cosThetaReusesMag = true;
+                        parsed.cosThetaExpr = parsed.magVar;
+                    }
+                    else
+                    {
+                        int pairIdx = (int)parsedPairs.size();
+                        parsed.cosThetaName = "_ctheta_" + std::to_string(pairIdx);
+                        parsed.cosThetaVar =
+                            bind::realConst(mkTerm<std::string>(parsed.cosThetaName, m_efac));
+                        parsed.cosThetaVarPrime =
+                            bind::realConst(mkTerm<std::string>(parsed.cosThetaName + "'", m_efac));
+                        parsed.cosThetaExpr = parsed.cosThetaVar;
+                    }
+                }
+
+                // --- Algebraic sin(θ) ---
+                if (entry.contains("sin_theta_poly"))
+                {
+                    parsed.hasSinThetaAlg = true;
+                    parsed.sinThetaAlnum.rootIdx = 0;
+                    for (const auto &coeff : entry["sin_theta_poly"])
+                        parsed.sinThetaAlnum.poly.emplace_back(coeff.get<std::string>());
+                    parsed.sinThetaAlnum.lower =
+                        parseRationalString(entry["sin_theta_low"].get<std::string>());
+                    parsed.sinThetaAlnum.upper =
+                        parseRationalString(entry["sin_theta_high"].get<std::string>());
+
+                    bool samePoly = (parsed.sinThetaAlnum.poly == parsed.magAlnum.poly);
+                    bool overlap = (parsed.sinThetaAlnum.lower <= parsed.magAlnum.upper &&
+                                    parsed.magAlnum.lower <= parsed.sinThetaAlnum.upper);
+                    if (samePoly && overlap)
+                    {
+                        parsed.sinThetaReusesMag = true;
+                        parsed.sinThetaExpr = parsed.magVar;
+                    }
+                    else
+                    {
+                        int pairIdx = (int)parsedPairs.size();
+                        parsed.sinThetaName = "_stheta_" + std::to_string(pairIdx);
+                        parsed.sinThetaVar =
+                            bind::realConst(mkTerm<std::string>(parsed.sinThetaName, m_efac));
+                        parsed.sinThetaVarPrime =
+                            bind::realConst(mkTerm<std::string>(parsed.sinThetaName + "'", m_efac));
+                        parsed.sinThetaExpr = parsed.sinThetaVar;
+                    }
+                }
+                parsedPairs.push_back(parsed);
+            }
+
+            complexPairRegistry[i] = std::move(parsedPairs);
+        }
+
+        void registerAlgRoots(int i)
+        {
+            assert(i < invNumber);
+            auto registryIt = algRootRegistry.find(i);
+            if (registryIt == algRootRegistry.end() || registryIt->second.empty())
+                return;
+
+            Expr rel = decls[i];
+            for (const auto &entry : registryIt->second)
+            {
+                bool alreadyInRM = false;
+                for (const auto &v : ruleManager.invVars[rel])
+                {
+                    if (v == entry.var)
+                    {
+                        alreadyInRM = true;
+                        break;
+                    }
+                }
+                if (alreadyInRM)
+                    continue;
+
+                invarVarsShort[i].push_back(entry.var);
+
+                ExprVector updatedVars = ruleManager.invVars[rel];
+                updatedVars.push_back(entry.var);
+                ruleManager.invVars[rel].clear();
+                ruleManager.invVarsPrime[rel].push_back(entry.varPrime);
+                ruleManager.addDeclAndVars(rel, updatedVars);
+
+                for (auto &hr : ruleManager.chcs)
+                {
+                    int srcNum = getVarIndex(hr.srcRelation, decls);
+                    int dstNum = getVarIndex(hr.dstRelation, decls);
+
+                    if (hr.isFact && dstNum == i)
+                    {
+                        hr.dstVars.push_back(entry.varPrime);
+
+                        ExprSet bodyConj;
+                        getConj(hr.body, bodyConj);
+                        bodyConj.insert(createRootConstraint(entry.varPrime, entry.alnum));
+                        hr.body = conjoin(bodyConj, m_efac);
+                    }
+
+                    if (hr.isInductive || (!hr.isFact && !hr.isQuery))
+                    {
+                        hr.srcVars.push_back(entry.var);
+                        hr.dstVars.push_back(entry.varPrime);
+
+                        ExprSet bodyConj;
+                        getConj(hr.body, bodyConj);
+                        bodyConj.insert(mk<EQ>(entry.varPrime, entry.var));
+                        hr.body = conjoin(bodyConj, m_efac);
+                    }
+
+                    if (hr.isQuery && srcNum == i)
+                    {
+                        hr.srcVars.push_back(entry.var);
+                    }
+                }
+            }
+
+            updateCategorizationOfCHCs(i);
+        }
+
+        void registerComplexPairs(int i)
+        {
+            assert(i < invNumber);
+            auto registryIt = complexPairRegistry.find(i);
+            if (registryIt == complexPairRegistry.end() || registryIt->second.empty())
+                return;
+
+            Expr rel = decls[i];
+            for (const auto &entry : registryIt->second)
+            {
+                bool alreadyInRM = false;
+                for (const auto &v : ruleManager.invVars[rel])
+                {
+                    if (v == entry.magVar)
+                    {
+                        alreadyInRM = true;
+                        break;
+                    }
+                }
+                if (alreadyInRM)
+                    continue;
+
+                invarVarsShort[i].push_back(entry.magVar);
+                invarVarsShort[i].push_back(entry.ccosVar);
+                invarVarsShort[i].push_back(entry.csinVar);
+
+                ExprVector updatedVars = ruleManager.invVars[rel];
+                updatedVars.push_back(entry.magVar);
+                updatedVars.push_back(entry.ccosVar);
+                updatedVars.push_back(entry.csinVar);
+                ruleManager.invVars[rel].clear();
+                ruleManager.invVarsPrime[rel].push_back(entry.magVarPrime);
+                ruleManager.invVarsPrime[rel].push_back(entry.ccosVarPrime);
+                ruleManager.invVarsPrime[rel].push_back(entry.csinVarPrime);
+
+                // Add independent algebraic trig variables (not reusing magVar).
+                if (entry.hasCosThetaAlg && !entry.cosThetaReusesMag)
+                {
+                    invarVarsShort[i].push_back(entry.cosThetaVar);
+                    updatedVars.push_back(entry.cosThetaVar);
+                    ruleManager.invVarsPrime[rel].push_back(entry.cosThetaVarPrime);
+                }
+                if (entry.hasSinThetaAlg && !entry.sinThetaReusesMag)
+                {
+                    invarVarsShort[i].push_back(entry.sinThetaVar);
+                    updatedVars.push_back(entry.sinThetaVar);
+                    ruleManager.invVarsPrime[rel].push_back(entry.sinThetaVarPrime);
+                }
+
+                ruleManager.addDeclAndVars(rel, updatedVars);
+
+                for (auto &hr : ruleManager.chcs)
+                {
+                    int srcNum = getVarIndex(hr.srcRelation, decls);
+                    int dstNum = getVarIndex(hr.dstRelation, decls);
+
+                    if (hr.isFact && dstNum == i)
+                    {
+                        hr.dstVars.push_back(entry.magVarPrime);
+                        hr.dstVars.push_back(entry.ccosVarPrime);
+                        hr.dstVars.push_back(entry.csinVarPrime);
+
+                        ExprSet bodyConj;
+                        getConj(hr.body, bodyConj);
+                        bodyConj.insert(createRootConstraint(entry.magVarPrime, entry.magAlnum));
+                        bodyConj.insert(mk<EQ>(entry.ccosVarPrime, oneReal));
+                        bodyConj.insert(mk<EQ>(entry.csinVarPrime, zeroReal));
+
+                        if (entry.hasCosThetaAlg && !entry.cosThetaReusesMag)
+                        {
+                            hr.dstVars.push_back(entry.cosThetaVarPrime);
+                            bodyConj.insert(
+                                createRootConstraint(entry.cosThetaVarPrime, entry.cosThetaAlnum));
+                        }
+                        if (entry.hasSinThetaAlg && !entry.sinThetaReusesMag)
+                        {
+                            hr.dstVars.push_back(entry.sinThetaVarPrime);
+                            bodyConj.insert(
+                                createRootConstraint(entry.sinThetaVarPrime, entry.sinThetaAlnum));
+                        }
+
+                        hr.body = conjoin(bodyConj, m_efac);
+                    }
+
+                    if (hr.isInductive || (!hr.isFact && !hr.isQuery))
+                    {
+                        hr.srcVars.push_back(entry.magVar);
+                        hr.srcVars.push_back(entry.ccosVar);
+                        hr.srcVars.push_back(entry.csinVar);
+                        hr.dstVars.push_back(entry.magVarPrime);
+                        hr.dstVars.push_back(entry.ccosVarPrime);
+                        hr.dstVars.push_back(entry.csinVarPrime);
+
+                        ExprSet bodyConj;
+                        getConj(hr.body, bodyConj);
+                        bodyConj.insert(mk<EQ>(entry.magVarPrime, entry.magVar));
+                        bodyConj.insert(mk<EQ>(
+                            entry.ccosVarPrime,
+                            mk<MINUS>(
+                                mk<MULT>(entry.ccosVar, entry.cosThetaExpr),
+                                mk<MULT>(entry.csinVar, entry.sinThetaExpr))));
+                        bodyConj.insert(mk<EQ>(
+                            entry.csinVarPrime,
+                            mk<PLUS>(
+                                mk<MULT>(entry.csinVar, entry.cosThetaExpr),
+                                mk<MULT>(entry.ccosVar, entry.sinThetaExpr))));
+                        bodyConj.insert(mk<EQ>(
+                            mk<PLUS>(
+                                mk<MULT>(entry.ccosVar, entry.ccosVar),
+                                mk<MULT>(entry.csinVar, entry.csinVar)),
+                            oneReal));
+
+                        if (entry.hasCosThetaAlg && !entry.cosThetaReusesMag)
+                        {
+                            hr.srcVars.push_back(entry.cosThetaVar);
+                            hr.dstVars.push_back(entry.cosThetaVarPrime);
+                            bodyConj.insert(mk<EQ>(entry.cosThetaVarPrime, entry.cosThetaVar));
+                        }
+                        if (entry.hasSinThetaAlg && !entry.sinThetaReusesMag)
+                        {
+                            hr.srcVars.push_back(entry.sinThetaVar);
+                            hr.dstVars.push_back(entry.sinThetaVarPrime);
+                            bodyConj.insert(mk<EQ>(entry.sinThetaVarPrime, entry.sinThetaVar));
+                        }
+
+                        hr.body = conjoin(bodyConj, m_efac);
+                    }
+
+                    if (hr.isQuery && srcNum == i)
+                    {
+                        hr.srcVars.push_back(entry.magVar);
+                        hr.srcVars.push_back(entry.ccosVar);
+                        hr.srcVars.push_back(entry.csinVar);
+                        if (entry.hasCosThetaAlg && !entry.cosThetaReusesMag)
+                            hr.srcVars.push_back(entry.cosThetaVar);
+                        if (entry.hasSinThetaAlg && !entry.sinThetaReusesMag)
+                            hr.srcVars.push_back(entry.sinThetaVar);
+                    }
+                }
+            }
+
+            updateCategorizationOfCHCs(i);
+        }
+
         /**
          *
          */
@@ -448,8 +953,32 @@ namespace ufo
         // variables.  Substitutes each sqrtN with std::sqrt(N) so that the
         // resulting string is purely numeric and can be parsed by
         // expr_to_double.
-        double evaluateBaseString(const std::string &baseStr)
+        double evaluateBaseString(int invIdx, const std::string &baseStr)
         {
+            if (const AlgRootEntry *entry = findAlgRootEntry(invIdx, baseStr))
+            {
+                return entry->alnum.midpoint().get_d();
+            }
+
+            if (const ComplexPairEntry *entry = findComplexPairEntry(invIdx, baseStr))
+            {
+                if (baseStr == entry->magName)
+                    return entry->magAlnum.midpoint().get_d();
+                if (baseStr == entry->ccosName)
+                    return entry->cosTheta;
+                if (baseStr == entry->csinName)
+                    return entry->sinTheta;
+            }
+
+            if (baseStr.find("_alg_") != std::string::npos ||
+                baseStr.find("_mag_") != std::string::npos ||
+                baseStr.find("_ccos_") != std::string::npos ||
+                baseStr.find("_csin_") != std::string::npos)
+            {
+                Expr parsed = str_to_expr(baseStr, std::vector<std::string>(), invIdx);
+                return expr_to_double(replaceClosedFormPlaceholdersWithConstants(parsed, invIdx));
+            }
+
             std::string s = baseStr;
             // Find all occurrences of "sqrtDDD..." and replace with numeric value
             std::string::size_type pos = 0;
@@ -488,7 +1017,7 @@ namespace ufo
             ExprSet bounds;
             for (auto &[numeric, symbolic] : rootMaps[i])
             {
-                double temp = evaluateBaseString(numeric);
+                double temp = evaluateBaseString(i, numeric);
                 if (temp < 0)
                 {
                     DLOG_IF(3)
@@ -682,7 +1211,17 @@ namespace ufo
             // conjuncts.  These must NOT be guarded by any index condition
             // because the coefficients in the closed forms reference sqrtN
             // at every step, not just the initial one.
-            if (squareRootExists.count(i))
+            if (algRootRegistry.count(i) > 0 && !algRootRegistry[i].empty())
+            {
+                for (const auto &entry : algRootRegistry[i])
+                {
+                    Expr constraint = createRootConstraint(entry.var, entry.alnum);
+                    bounds.insert(constraint);
+                    DLOG(3) << "generateRootBounds: added algebraic constraint for "
+                            << entry.name << ": " << constraint << "\n";
+                }
+            }
+            else if (squareRootExists.count(i))
             {
                 for (const auto &sqrtSuffix : squareRootExists[i])
                 {
@@ -692,6 +1231,40 @@ namespace ufo
                     bounds.insert(constraint);
                     DLOG(3) << "generateRootBounds: added sqrt constraint for "
                             << fullName << ": " << constraint << "\n";
+                }
+            }
+
+            if (complexPairRegistry.count(i) > 0 && !complexPairRegistry[i].empty())
+            {
+                Expr negOne = mkTerm(mpq_class("-1"), m_efac);
+                for (const auto &entry : complexPairRegistry[i])
+                {
+                    bounds.insert(createRootConstraint(entry.magVar, entry.magAlnum));
+                    bounds.insert(mk<LEQ>(negOne, entry.ccosVar));
+                    bounds.insert(mk<LEQ>(entry.ccosVar, oneReal));
+                    bounds.insert(mk<LEQ>(negOne, entry.csinVar));
+                    bounds.insert(mk<LEQ>(entry.csinVar, oneReal));
+                    bounds.insert(mk<EQ>(
+                        mk<PLUS>(
+                            mk<MULT>(entry.ccosVar, entry.ccosVar),
+                            mk<MULT>(entry.csinVar, entry.csinVar)),
+                        oneReal));
+                    // Algebraic constraints for independent trig-angle variables.
+                    if (entry.hasCosThetaAlg && !entry.cosThetaReusesMag)
+                    {
+                        bounds.insert(createRootConstraint(entry.cosThetaVar, entry.cosThetaAlnum));
+                        DLOG(3) << "generateRootBounds: added cos-theta algebraic constraint for "
+                                << entry.cosThetaName << "\n";
+                    }
+                    if (entry.hasSinThetaAlg && !entry.sinThetaReusesMag)
+                    {
+                        bounds.insert(createRootConstraint(entry.sinThetaVar, entry.sinThetaAlnum));
+                        DLOG(3) << "generateRootBounds: added sin-theta algebraic constraint for "
+                                << entry.sinThetaName << "\n";
+                    }
+                    DLOG(3) << "generateRootBounds: added complex pair constraints for "
+                            << entry.magName << ", " << entry.ccosName << ", "
+                            << entry.csinName << "\n";
                 }
             }
 
@@ -710,10 +1283,12 @@ namespace ufo
 
             // each variable that has a closed form — use only the final
             // (general) piece, guarded by i >= 0 for the entire domain.
-            for (auto &[name, v] : closedformJson.items())
+            for (auto item = closedformJson.items().begin(); item != closedformJson.items().end(); ++item)
             {
+                const std::string name = item.key();
+                auto &v = item.value();
                 //  get variable using the name of the variable stored in v
-                auto is_equal = [&](Expr var)
+                auto is_equal = [this, &name](Expr var)
                 {
                     return boost::algorithm::to_lower_copy(getVarName(var)) == name;
                 };
@@ -749,7 +1324,15 @@ namespace ufo
                         hasNonlinearity = true;
                     }
 
-                    Expr t = str_to_expr(c_str);
+                    if (c_str.find("_alg_") != std::string::npos || b_str.find("_alg_") != std::string::npos ||
+                        c_str.find("_mag_") != std::string::npos || b_str.find("_mag_") != std::string::npos ||
+                        c_str.find("_ccos_") != std::string::npos || b_str.find("_ccos_") != std::string::npos ||
+                        c_str.find("_csin_") != std::string::npos || b_str.find("_csin_") != std::string::npos)
+                    {
+                        hasNonlinearity = true;
+                    }
+
+                    Expr t = str_to_expr(c_str, std::vector<std::string>(), i);
                     DLOG(5) << "new expression: " << t << "\n";
                     Expr c = replaceCoeffVariables(t, index, i);
                     Expr b = rootMap[b_str];
@@ -1052,21 +1635,44 @@ namespace ufo
 
             // Build the initial map of definitions from the CHC body
             std::map<expr::Expr, expr::Expr> dstVarDefinitions;
+            std::map<std::string, expr::Expr> dstVarsByName;
+            for (const auto &dstVar : inductiveRule->dstVars)
+            {
+                dstVarsByName[getVarName(dstVar)] = dstVar;
+            }
             expr::ExprSet inductiveConjuncts;
             ufo::getConj(inductiveRule->body, inductiveConjuncts);
             for (const auto &conj : inductiveConjuncts)
             {
                 if (expr::isOpX<expr::op::EQ>(conj) && conj->arity() == 2)
                 {
-                    // Assuming conj->left() is a dstVar and conj->right() is its definition
+                    Expr lhs = conj->left();
+                    Expr rhs = conj->right();
+                    std::string lhsName = getVarName(lhs);
+                    std::string rhsName = getVarName(rhs);
+                    bool lhsIsDst = dstVarsByName.count(lhsName) > 0;
+                    bool rhsIsDst = dstVarsByName.count(rhsName) > 0;
+
                     DLOG_IF(4)
                     {
-                        std::cout << "Assuming conj->left() is a dstVar and conj->right() is its definition." << std::endl;
                         std::cout << "Processing EQ: " << *conj << std::endl;
-                        std::cout << "Left side of EQ: " << *conj->left() << std::endl;
-                        std::cout << "Right side of EQ: " << *conj->right() << std::endl;
+                        std::cout << "Left side of EQ: " << *lhs << std::endl;
+                        std::cout << "Right side of EQ: " << *rhs << std::endl;
+                        std::cout << "lhsIsDst=" << lhsIsDst << " rhsIsDst=" << rhsIsDst << std::endl;
                     }
-                    dstVarDefinitions[conj->left()] = conj->right();
+
+                    if (lhsIsDst && !rhsIsDst)
+                    {
+                        dstVarDefinitions[dstVarsByName[lhsName]] = rhs;
+                    }
+                    else if (rhsIsDst && !lhsIsDst)
+                    {
+                        dstVarDefinitions[dstVarsByName[rhsName]] = lhs;
+                    }
+                    else if (lhsIsDst)
+                    {
+                        dstVarDefinitions[dstVarsByName[lhsName]] = rhs;
+                    }
                 }
             }
 
@@ -1181,6 +1787,49 @@ namespace ufo
                     rhsExpr, srcVarRenames));
             }
 
+            auto replaceExactToken = [&](std::string &text, const std::string &from, const std::string &to)
+            {
+                auto isIdentChar = [](char c)
+                {
+                    return std::isalnum((unsigned char)c) || c == '_' || c == '\'';
+                };
+
+                std::string result;
+                size_t pos = 0;
+                while (pos < text.size())
+                {
+                    size_t found = text.find(from, pos);
+                    if (found == std::string::npos)
+                    {
+                        result += text.substr(pos);
+                        break;
+                    }
+
+                    bool leftOK = (found == 0 || !isIdentChar(text[found - 1]));
+                    size_t after = found + from.size();
+                    bool rightOK = (after >= text.size() || !isIdentChar(text[after]));
+
+                    result += text.substr(pos, found - pos);
+                    result += (leftOK && rightOK) ? to : from;
+                    pos = after;
+                }
+                text = result;
+            };
+
+            // Primed init parameters are invalid POLAR identifiers.  They are
+            // transition artifacts and must collapse back to the unprimed
+            // parameter name before serialization.
+            if (initVarNames.size() > static_cast<size_t>(myinv))
+            {
+                for (const auto &initName : initVarNames[myinv])
+                {
+                    for (auto &s : loopRhsStrings)
+                    {
+                        replaceExactToken(s, initName + "'", initName);
+                    }
+                }
+            }
+
             // Identify variables with identity transitions (v' = v; never update).
             // Replace them with their _init form so POLAR treats them as parameters.
             std::set<std::string> identityVarsFound;
@@ -1214,26 +1863,8 @@ namespace ufo
                 std::string to = initVarNameMap[myinv][ivar]; // e.g. "_FH_1_INIT"
                 for (auto &s : loopRhsStrings)
                 {
-                    std::string result;
-                    size_t pos = 0;
-                    while (pos < s.size())
-                    {
-                        size_t found = s.find(from, pos);
-                        if (found == std::string::npos)
-                        {
-                            result += s.substr(pos);
-                            break;
-                        }
-                        bool leftOK = (found == 0 ||
-                                       (!std::isalnum((unsigned char)s[found - 1]) && s[found - 1] != '_'));
-                        bool rightOK = (found + from.size() >= s.size() ||
-                                        (!std::isalnum((unsigned char)s[found + from.size()]) &&
-                                         s[found + from.size()] != '_'));
-                        result += s.substr(pos, found - pos);
-                        result += (leftOK && rightOK) ? to : from;
-                        pos = found + from.size();
-                    }
-                    s = result;
+                    replaceExactToken(s, from + "'", to);
+                    replaceExactToken(s, from, to);
                 }
             }
 
@@ -1749,20 +2380,28 @@ namespace ufo
                 }
                 if (sat)
                 {
-                    auto model = nlsolver->getModel();
-                    ExprVector eqs;
-                    ExprSet allVars;
-                    filter(conjoin(exprs, m_efac), bind::IsConst(), inserter(allVars, allVars.begin()));
-                    for (auto &v : allVars)
-                    {
-                        Expr val = model.eval(v);
-                        if (val != nullptr && val != v)
-                            eqs.push_back(mk<EQ>(v, val));
-                    }
-                    Expr modelExpr = conjoin(eqs, m_efac);
                     DLOG_IF(5)
                     {
-                        outs() << "Model: " << modelExpr << "\n";
+                        try
+                        {
+                            auto model = nlsolver->getModel();
+                            ExprVector eqs;
+                            ExprSet allVars;
+                            filter(conjoin(exprs, m_efac), bind::IsConst(), inserter(allVars, allVars.begin()));
+                            for (auto &v : allVars)
+                            {
+                                Expr val = model.eval(v);
+                                if (val != nullptr && val != v)
+                                    eqs.push_back(mk<EQ>(v, val));
+                            }
+                            Expr modelExpr = conjoin(eqs, m_efac);
+                            outs() << "Model: " << modelExpr << "\n";
+                        }
+                        catch (const std::exception &modelErr)
+                        {
+                            DLOG(2) << "Warning: failed to decode QF_NRA model: "
+                                    << modelErr.what() << "\n";
+                        }
                     }
                 }
             }
@@ -1788,7 +2427,15 @@ namespace ufo
                     DLOG_IF(5)
                     {
                         outs() << "Expressions" << conjoin(exprs, m_efac) << "\n";
-                        outs() << u.getModel() << "\n";
+                        try
+                        {
+                            outs() << u.getModel() << "\n";
+                        }
+                        catch (const std::exception &modelErr)
+                        {
+                            outs() << "Warning: failed to decode fallback solver model: "
+                                   << modelErr.what() << "\n";
+                        }
                     }
                 }
             }
@@ -1909,7 +2556,7 @@ namespace ufo
             Expr myRealRootPrime = bind::realConst(rootNamePrimedExpr);
             DLOG(5) << "Created symbolic root variables: " << myRealRoot << ", " << myRealRootPrime << "\n";
 
-            Expr myRootUpdate = str_to_expr(rootVal, sqrts);
+            Expr myRootUpdate = str_to_expr(rootVal, sqrts, i);
 
             // Normalize init-variable names that POLAR emits in lowercase
             // (e.g. _fh_0_init) to the internal uppercase representation
@@ -2291,6 +2938,42 @@ namespace ufo
             return results;
         }
 
+        Expr createRootConstraint(Expr rootVar, const AlgebraicNum &alnum)
+        {
+            Expr lo = mkTerm(alnum.lower, m_efac);
+            Expr hi = mkTerm(alnum.upper, m_efac);
+            Expr bounds = mk<AND>(mk<LEQ>(lo, rootVar), mk<LEQ>(rootVar, hi));
+
+            if (alnum.poly.empty())
+            {
+                DLOG(2) << "Warning: algebraic root " << rootVar
+                        << " has no defining polynomial; using interval only\n";
+                return bounds;
+            }
+
+            if (alnum.degree() >= 5)
+            {
+                DLOG(2) << "Warning: omitting polynomial equality for high-degree algebraic root "
+                        << rootVar << " (degree " << alnum.degree() << ")\n";
+                return bounds;
+            }
+
+            Expr polyExpr = mkTerm(mpq_class(alnum.poly[0]), m_efac);
+            if (alnum.poly.size() > 1)
+            {
+                Expr power = rootVar;
+                for (size_t idx = 1; idx < alnum.poly.size(); ++idx)
+                {
+                    Expr coeff = mkTerm(mpq_class(alnum.poly[idx]), m_efac);
+                    polyExpr = mk<PLUS>(polyExpr, mk<MULT>(coeff, power));
+                    if (idx + 1 < alnum.poly.size())
+                        power = mk<MULT>(power, rootVar);
+                }
+            }
+
+            return mk<AND>(bounds, mk<EQ>(polyExpr, zeroReal));
+        }
+
         // Helper: Create constraint assertion for special root variables
         // For "sqrt17": (assert (and (> sqrt17 0) (= 17 (* sqrt17 sqrt17))))
         Expr createRootConstraint(Expr rootVar, const std::string &rootValue)
@@ -2320,8 +3003,13 @@ namespace ufo
             assert(i < invNumber);
             symbolicRoots[i] = ExprVector();
             numericRoots[i] = ExprVector();
-            squareRootExists[i] = set<std::string>();
             std::map<std::string, Expr> rootMap;
+
+            bool useAlgRegistry = algRootRegistry.count(i) > 0 && !algRootRegistry[i].empty();
+            if (!useAlgRegistry)
+            {
+                squareRootExists[i] = set<std::string>();
+            }
 
             ExprSet rootConstraints; // Collect constraints for special roots
             size_t rootCount = 0;
@@ -2343,9 +3031,12 @@ namespace ufo
                         {
                             // Check if this is a special root variable like "sqrt17"
                             std::vector<std::string> rootValueOpt;
-                            rootValueOpt = extractRootValue(baseStr);
+                            if (!useAlgRegistry)
+                            {
+                                rootValueOpt = extractRootValue(baseStr);
+                            }
 
-                            if (rootValueOpt.size() != 0)
+                            if (!useAlgRegistry && rootValueOpt.size() != 0)
                             {
                                 DLOG(3) << "Adding constraint for special root: " << baseStr << "\n";
 
@@ -2383,7 +3074,7 @@ namespace ufo
             }
 
             // Add all root constraints to initial conditions
-            if (!rootConstraints.empty())
+            if (!useAlgRegistry && !rootConstraints.empty())
             {
                 ExprSet bodyConjuncts;
                 // Get any existing fact constraints
@@ -2415,85 +3106,95 @@ namespace ufo
             // (after all _r_N roots have been added), so their position matches
             // the position in dstVars/srcVars. Adding them earlier (before addRoot)
             // causes a positional mismatch that corrupts replaceAll substitution.
-            for (const auto &sqrtSuffix : squareRootExists[i])
+            if (useAlgRegistry)
             {
-                std::string fullName = "sqrt" + sqrtSuffix;
-                std::string primedName = fullName + "'";
-
-                Expr sqrtVar = bind::realConst(mkTerm<std::string>(fullName, m_efac));
-                Expr sqrtVarPrime = bind::realConst(mkTerm<std::string>(primedName, m_efac));
-
-                // Check if already registered in ruleManager to avoid duplicates
-                Expr rel = decls[i];
-                bool alreadyInRM = false;
-                for (const auto &v : ruleManager.invVars[rel])
+                registerAlgRoots(i);
+            }
+            else
+                for (const auto &sqrtSuffix : squareRootExists[i])
                 {
-                    if (v == sqrtVar)
+                    std::string fullName = "sqrt" + sqrtSuffix;
+                    std::string primedName = fullName + "'";
+
+                    Expr sqrtVar = bind::realConst(mkTerm<std::string>(fullName, m_efac));
+                    Expr sqrtVarPrime = bind::realConst(mkTerm<std::string>(primedName, m_efac));
+
+                    // Check if already registered in ruleManager to avoid duplicates
+                    Expr rel = decls[i];
+                    bool alreadyInRM = false;
+                    for (const auto &v : ruleManager.invVars[rel])
                     {
-                        alreadyInRM = true;
-                        break;
+                        if (v == sqrtVar)
+                        {
+                            alreadyInRM = true;
+                            break;
+                        }
+                    }
+                    if (alreadyInRM)
+                        continue;
+
+                    DLOG(3) << "Registering sqrt variable " << fullName
+                            << " in CHC rules and ruleManager for invariant #" << i << "\n";
+
+                    // Add to invarVarsShort[i] — must happen HERE, after all _r_N roots,
+                    // so the position matches the dstVars/srcVars push below.
+                    invarVarsShort[i].push_back(sqrtVar);
+
+                    // Update ruleManager.invVars and invVarsPrime
+                    ExprVector updatedVars = ruleManager.invVars[rel];
+                    updatedVars.push_back(sqrtVar);
+                    ruleManager.invVars[rel].clear();
+                    ruleManager.invVarsPrime[rel].push_back(sqrtVarPrime);
+                    ruleManager.addDeclAndVars(rel, updatedVars);
+
+                    // Add to each CHC rule's srcVars/dstVars
+                    for (auto &hr : ruleManager.chcs)
+                    {
+                        int srcNum = getVarIndex(hr.srcRelation, decls);
+                        int dstNum = getVarIndex(hr.dstRelation, decls);
+
+                        if (hr.isFact && dstNum == i)
+                        {
+                            hr.dstVars.push_back(sqrtVarPrime);
+
+                            // Add sqrt' = sqrt to fact body so the value is constrained
+                            ExprSet bodyConj;
+                            getConj(hr.body, bodyConj);
+                            bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
+                            hr.body = conjoin(bodyConj, m_efac);
+
+                            DLOG(3) << "Adding " << primedName
+                                    << " to dstVars of fact rule\n";
+                        }
+
+                        if (hr.isInductive || (!hr.isFact && !hr.isQuery))
+                        {
+                            hr.srcVars.push_back(sqrtVar);
+                            hr.dstVars.push_back(sqrtVarPrime);
+
+                            // sqrt is constant across iterations: sqrt' = sqrt
+                            ExprSet bodyConj;
+                            getConj(hr.body, bodyConj);
+                            bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
+                            hr.body = conjoin(bodyConj, m_efac);
+
+                            DLOG(3) << "Adding " << fullName << " / " << primedName
+                                    << " to srcVars/dstVars of transition rule\n";
+                        }
+
+                        if (hr.isQuery && srcNum == i)
+                        {
+                            hr.srcVars.push_back(sqrtVar);
+
+                            DLOG(3) << "Adding " << fullName
+                                    << " to srcVars of query rule\n";
+                        }
                     }
                 }
-                if (alreadyInRM)
-                    continue;
 
-                DLOG(3) << "Registering sqrt variable " << fullName
-                        << " in CHC rules and ruleManager for invariant #" << i << "\n";
-
-                // Add to invarVarsShort[i] — must happen HERE, after all _r_N roots,
-                // so the position matches the dstVars/srcVars push below.
-                invarVarsShort[i].push_back(sqrtVar);
-
-                // Update ruleManager.invVars and invVarsPrime
-                ExprVector updatedVars = ruleManager.invVars[rel];
-                updatedVars.push_back(sqrtVar);
-                ruleManager.invVars[rel].clear();
-                ruleManager.invVarsPrime[rel].push_back(sqrtVarPrime);
-                ruleManager.addDeclAndVars(rel, updatedVars);
-
-                // Add to each CHC rule's srcVars/dstVars
-                for (auto &hr : ruleManager.chcs)
-                {
-                    int srcNum = getVarIndex(hr.srcRelation, decls);
-                    int dstNum = getVarIndex(hr.dstRelation, decls);
-
-                    if (hr.isFact && dstNum == i)
-                    {
-                        hr.dstVars.push_back(sqrtVarPrime);
-
-                        // Add sqrt' = sqrt to fact body so the value is constrained
-                        ExprSet bodyConj;
-                        getConj(hr.body, bodyConj);
-                        bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
-                        hr.body = conjoin(bodyConj, m_efac);
-
-                        DLOG(3) << "Adding " << primedName
-                                << " to dstVars of fact rule\n";
-                    }
-
-                    if (hr.isInductive || (!hr.isFact && !hr.isQuery))
-                    {
-                        hr.srcVars.push_back(sqrtVar);
-                        hr.dstVars.push_back(sqrtVarPrime);
-
-                        // sqrt is constant across iterations: sqrt' = sqrt
-                        ExprSet bodyConj;
-                        getConj(hr.body, bodyConj);
-                        bodyConj.insert(mk<EQ>(sqrtVarPrime, sqrtVar));
-                        hr.body = conjoin(bodyConj, m_efac);
-
-                        DLOG(3) << "Adding " << fullName << " / " << primedName
-                                << " to srcVars/dstVars of transition rule\n";
-                    }
-
-                    if (hr.isQuery && srcNum == i)
-                    {
-                        hr.srcVars.push_back(sqrtVar);
-
-                        DLOG(3) << "Adding " << fullName
-                                << " to srcVars of query rule\n";
-                    }
-                }
+            if (complexPairRegistry.count(i) > 0 && !complexPairRegistry[i].empty())
+            {
+                registerComplexPairs(i);
             }
 
             updateCategorizationOfCHCs(i);
@@ -2550,6 +3251,35 @@ namespace ufo
                 {
                     replacements[var] = indexVar;
                 }
+                else if (vname.substr(0, 5) == "_alg_")
+                {
+                    const AlgRootEntry *algEntry = findAlgRootEntry(invIdx, vname);
+                    if (algEntry != nullptr)
+                    {
+                        replacements[var] = algEntry->var;
+                    }
+                    else
+                    {
+                        DLOG(2) << "Warning: unknown algebraic placeholder '" << vname
+                                << "' in coefficient, replacing with index\n";
+                        replacements[var] = indexVar;
+                    }
+                }
+                else if (const ComplexPairEntry *complexEntry = findComplexPairEntry(invIdx, vname))
+                {
+                    if (vname == complexEntry->magName)
+                    {
+                        replacements[var] = complexEntry->magVar;
+                    }
+                    else if (vname == complexEntry->ccosName)
+                    {
+                        replacements[var] = complexEntry->ccosVar;
+                    }
+                    else
+                    {
+                        replacements[var] = complexEntry->csinVar;
+                    }
+                }
                 else if (vname.substr(0, 4) == "sqrt")
                 {
                     // Look up the matching sqrt Expr in invarVarsShort
@@ -2599,6 +3329,28 @@ namespace ufo
             }
 
             return replaceAll(expr, replacements);
+        }
+
+        Expr simplifyKnownAlgExpr(Expr expr, int invIdx)
+        {
+            Expr simplified = simplifyArithm(expr);
+            auto registryIt = algRootRegistry.find(invIdx);
+            if (registryIt == algRootRegistry.end())
+                return simplified;
+
+            for (const auto &entry : registryIt->second)
+            {
+                if (entry.alnum.poly.size() < 2)
+                    continue;
+
+                std::vector<mpq_class> poly;
+                poly.reserve(entry.alnum.poly.size());
+                for (const auto &coeff : entry.alnum.poly)
+                    poly.push_back(mpq_class(coeff));
+
+                simplified = simplifyAlgExpr(simplified, entry.var, poly);
+            }
+            return simplified;
         }
 
         std::vector<std::string> getAllInitVars(std::string s)
@@ -2670,6 +3422,22 @@ namespace ufo
             // outfile << "(set-logic QF_LIRA)\n";
             outfile += "(declare-const _x Real)\n";
             outfile += "(declare-const n Real)\n";
+            if (algRootRegistry.count(i) > 0)
+            {
+                for (const auto &entry : algRootRegistry[i])
+                {
+                    outfile += "(declare-const " + entry.name + " Real)\n";
+                }
+            }
+            if (complexPairRegistry.count(i) > 0)
+            {
+                for (const auto &entry : complexPairRegistry[i])
+                {
+                    outfile += "(declare-const " + entry.magName + " Real)\n";
+                    outfile += "(declare-const " + entry.ccosName + " Real)\n";
+                    outfile += "(declare-const " + entry.csinName + " Real)\n";
+                }
+            }
             for (auto s : sqrts)
             {
                 outfile += "(declare-const sqrt" + s + " Real)\n";
@@ -2990,6 +3758,16 @@ namespace ufo
             return;
         }
 
+        if (closedformJson.contains("aux_roots") && closedformJson["aux_roots"].is_array())
+        {
+            ds.parseAuxRoots(i, closedformJson["aux_roots"]);
+        }
+
+        if (closedformJson.contains("complex_pairs") && closedformJson["complex_pairs"].is_array())
+        {
+            ds.parseComplexPairs(i, closedformJson["complex_pairs"]);
+        }
+
         /**
          * Get the initial symbolic closed form as a conjunction
          */
@@ -3216,7 +3994,7 @@ namespace ufo
                 auto begin{std::chrono::steady_clock::now()};
                 auto end{begin};
                 std::chrono::duration<double> elapsed_seconds{};
-                Expr upperBound = simplifyArithm(mk<MULT>(previousUpper[s], n));
+                Expr upperBound = ds.simplifyKnownAlgExpr(mk<MULT>(previousUpper[s], n), i);
                 Expr cond = phaseCond[s].max(itr);
                 Expr bnd = mk<LEQ>(s, upperBound);
                 Expr newLemma = mk<IMPL>(cond, bnd);
@@ -3229,7 +4007,7 @@ namespace ufo
                         hasDeviated.insert(s);
                         do
                         {
-                            upperBound = simplifyArithm(mk<PLUS>(upperBound, ds.expEpsilon));
+                            upperBound = ds.simplifyKnownAlgExpr(mk<PLUS>(upperBound, ds.expEpsilon), i);
                             bnd = mk<LEQ>(s, upperBound);
                             newLemma = mk<IMPL>(cond, bnd);
                             annotations[i][0] = newLemma;
@@ -3246,7 +4024,7 @@ namespace ufo
                 Expr lowerBound;
                 if (hasDeviated.count(s) > 0)
                 {
-                    lowerBound = simplifyArithm(mk<MULT>(previousLower[s], n));
+                    lowerBound = ds.simplifyKnownAlgExpr(mk<MULT>(previousLower[s], n), i);
                 }
                 else
                 {
@@ -3265,7 +4043,7 @@ namespace ufo
                         hasDeviated.insert(s);
                         do
                         {
-                            lowerBound = simplifyArithm(mk<MINUS>(lowerBound, ds.expEpsilon));
+                            lowerBound = ds.simplifyKnownAlgExpr(mk<MINUS>(lowerBound, ds.expEpsilon), i);
                             bnd = mk<GEQ>(s, lowerBound);
                             newLemma = mk<IMPL>(cond, bnd);
                             annotations[i][0] = mk<AND>(upperLemma, newLemma);

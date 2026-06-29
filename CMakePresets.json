@@ -1,0 +1,57 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "clang-release",
+      "displayName": "Clang Release",
+      "description": "Default development preset using clang/clang++.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "default",
+      "displayName": "Default (Clang Release)",
+      "description": "Alias for the default clang release workflow.",
+      "inherits": "clang-release"
+    },
+    {
+      "name": "gcc-release",
+      "displayName": "GCC Release",
+      "description": "Secondary preset for GCC compatibility builds.",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/gcc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-clang-release",
+      "displayName": "Build Clang Release",
+      "configurePreset": "clang-release"
+    },
+    {
+      "name": "build-default",
+      "displayName": "Build Default (Clang Release)",
+      "configurePreset": "default"
+    },
+    {
+      "name": "build-gcc-release",
+      "displayName": "Build GCC Release",
+      "configurePreset": "gcc-release"
+    }
+  ]
+}

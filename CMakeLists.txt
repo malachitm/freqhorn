@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 3.28)
 
 project (FreqHorn)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/include/deep/Config.hpp.in"
   "${CMAKE_CURRENT_BINARY_DIR}/include/deep/Config.hpp"
@@ -10,6 +12,34 @@ configure_file(
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set (FreqHorn_VERSION_MAJOR 0)
 set (FreqHorn_VERSION_MINOR 5)
+
+# Look for the installed tools on the system path
+find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+find_program(CPPCHECK_EXE NAMES "cppcheck")
+
+# If Clang-Tidy is found, set it up
+if(CLANG_TIDY_EXE)
+    message(STATUS "Found Clang-Tidy: ${CLANG_TIDY_EXE}")
+  # Use checks from .clang-tidy to avoid forcing unrelated profiles (e.g. llvmlibc-*).
+  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+endif()
+
+# If Cppcheck is found, set it up
+if(CPPCHECK_EXE)
+    message(STATUS "Found Cppcheck: ${CPPCHECK_EXE}")
+    set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE};--enable=warning,performance,portability,style")
+endif()
+
+# Search for ccache on the system
+find_program(CCACHE_EXE NAMES "ccache")
+
+if(CCACHE_EXE)
+    message(STATUS "Found ccache: ${CCACHE_EXE}")
+    # Tell CMake to route C++ compilation through ccache
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXE}")
+    # Tell CMake to route C compilation through ccache (if applicable)
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXE}")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -80,10 +110,19 @@ ExternalProject_Add(z3
   ./configure -p <INSTALL_DIR> -b build --staticlib ${Z3_DEBUG}
   BUILD_COMMAND make -j3 -C build
   INSTALL_COMMAND make -C build install
-  COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_LIST_FILE}
   LOG_CONFIGURE 1
   LOG_INSTALL 1
   LOG_BUILD 1)
+
+# Prefer the local external-project install location by default.
+if (NOT Z3_ROOT)
+  set(Z3_ROOT "${CMAKE_BINARY_DIR}/run" CACHE PATH "Root of Z3 distribution." FORCE)
+endif()
+
+# Clear stale NOTFOUND cache values so each configure re-probes under Z3_ROOT.
+unset(Z3_EXECUTABLE CACHE)
+unset(Z3_INCLUDE_DIR CACHE)
+unset(Z3_LIBRARY CACHE)
 
 find_package(Z3 4.8.1)
 if (NOT Z3_FOUND)
@@ -165,10 +204,13 @@ install(DIRECTORY ${CMAKE_BINARY_DIR}/include/
   )
 
 set(CMAKE_CXX_EXTENSIONS ON)
-add_definitions(-Wno-redeclared-class-member -Wno-sometimes-uninitialized)
-add_definitions(-Wno-covered-switch-default)
-add_definitions(-Wno-inconsistent-missing-override)
+#add_definitions(-Wno-redeclared-class-member -Wno-sometimes-uninitialized)
+#add_definitions(-Wno-covered-switch-default)
+#add_definitions(-Wno-inconsistent-missing-override)
+add_definitions(-O2 -Wall -Wformat -Wformat=2 -Wconversion -Wimplicit-fallthrough -Werror=format-security -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS -fstrict-flex-arrays=3 -fstack-clash-protection -fstack-protector-strong -Wl,-z,nodlopen -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -Wl,--no-copy-dt-needed-entries)
 set(CMAKE_CXX_STANDARD 17)
+
+add_executable(MyApp testingSomething.cpp)
 
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
